@@ -4,8 +4,8 @@
 
 import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
-import { config } from '../../config';
-import prisma from '../../utils/db';
+import { config } from '../config';
+import prisma from '../utils/db';
 
 const router = Router();
 

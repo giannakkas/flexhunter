@@ -1,6 +1,5 @@
 FROM node:20-alpine
 
-# Prisma needs openssl on Alpine
 RUN apk add --no-cache openssl
 
 WORKDIR /app
@@ -14,4 +13,4 @@ COPY . .
 RUN npm run build:frontend
 
 EXPOSE 3000
-CMD ["npx", "tsx", "src/server/index.ts"]
+CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx src/server/index.ts"]
