@@ -311,34 +311,6 @@ export function DashboardPage() {
     <Page title="">
       <BlockStack gap="500">
 
-        {/* ── Header Bar ──────────────────────── */}
-        <Card>
-          <div style={{
-            background: 'linear-gradient(135deg, #0D1117 0%, #161B22 40%, #1A2332 100%)',
-            borderRadius: 10, padding: '20px 24px',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <img
-                src="/logo.png"
-                alt="FlexHunter"
-                style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }}
-              />
-              <div>
-                <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>FlexHunter</div>
-                <div style={{ color: '#8B949E', fontSize: 12 }}>Product Intelligence Dashboard</div>
-              </div>
-            </div>
-            <div style={{ display: 'flex', gap: 10 }}>
-              <Button onClick={() => navigate('/')} size="slim">Dashboard</Button>
-              <Button onClick={handleSync} loading={syncLoading} size="slim">Sync Performance</Button>
-              <Button variant="primary" onClick={handleResearch} loading={researchLoading} size="slim">
-                Run Research
-              </Button>
-            </div>
-          </div>
-        </Card>
-
         {/* ── Research Progress ────────────────── */}
         {showResearchProgress && (
           <ResearchProgress shopId="" onComplete={handleResearchComplete} />

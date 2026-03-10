@@ -92,26 +92,26 @@ export function ImportsPage() {
             action={{
               content: 'Connect to Shopify Now',
               onAction: () => {
-                // Open OAuth flow in top-level window (not iframe)
                 const url = `https://flexhunter-production.up.railway.app/api/connect-shopify?shop=${shopStatus.domain || ''}`;
-                if (window.top) {
-                  window.top.location.href = url;
-                } else {
-                  window.location.href = url;
-                }
+                if (window.top) window.top.location.href = url; else window.location.href = url;
               },
             }}>
-            <Text as="p">
-              Click the button to automatically connect FlexHunter with your Shopify store.
-              This grants the app permission to create and manage products on your behalf.
-            </Text>
+            <Text as="p">Click the button to connect FlexHunter with your Shopify store.</Text>
           </Banner>
         )}
 
-        {shopStatus && shopStatus.hasToken && items.length > 0 && (
-          <Banner tone="info" title="Optimize your products for search">
+        {shopStatus && shopStatus.hasToken && (
+          <Banner tone="warning" title="Need to re-authorize?"
+            action={{
+              content: 'Re-Authorize App',
+              onAction: () => {
+                const url = `https://flexhunter-production.up.railway.app/api/auth?shop=${shopStatus.domain || ''}`;
+                if (window.top) window.top.location.href = url; else window.location.href = url;
+              },
+            }}>
             <Text as="p">
-              Click "SEO" on any product for AI-powered title, description, and meta tag optimization.
+              If imports fail with a "scope" error, click Re-Authorize to grant FlexHunter 
+              permission to create products in your store.
             </Text>
           </Banner>
         )}

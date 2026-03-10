@@ -108,10 +108,10 @@ export function ResearchPage() {
     setAnalyzeProgress(0);
     const interval = setInterval(() => {
       setAnalyzeProgress(p => {
-        if (p >= 95) return 95;
-        return p + Math.random() * 8 + 2;
+        if (p >= 92) return 92;
+        return p + Math.random() * 2 + 0.5;
       });
-    }, 300);
+    }, 600);
 
     try {
       await apiFetch('/store-dna/analyze', { method: 'POST' });

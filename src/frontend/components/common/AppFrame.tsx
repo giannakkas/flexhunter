@@ -11,6 +11,8 @@ import {
   ListBulletedIcon,
 } from '@shopify/polaris-icons';
 
+import { AppHeader } from './AppHeader';
+
 export function AppFrame({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -93,7 +95,10 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         accessibilityLabel: 'FlexHunter',
       }}
     >
-      {children}
+      <div style={{ padding: '0 0 0 0' }}>
+        <AppHeader />
+        {children}
+      </div>
     </Frame>
   );
 }
