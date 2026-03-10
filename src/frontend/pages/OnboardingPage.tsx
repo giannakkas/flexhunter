@@ -23,36 +23,36 @@ const AUDIENCE_OPTIONS = [
 ];
 
 const CATEGORIES = [
-  { name: 'Room Decor & LED', emoji: '\uD83D\uDCA1' },
-  { name: 'Gaming Accessories', emoji: '\uD83C\uDFAE' },
-  { name: 'Tech Gadgets', emoji: '\uD83D\uDCF1' },
-  { name: 'Phone Accessories', emoji: '\uD83D\uDCDE' },
-  { name: 'Desk Setup', emoji: '\uD83D\uDDA5' },
-  { name: 'Creator Tools', emoji: '\uD83C\uDFAC' },
-  { name: 'Fashion Accessories', emoji: '\uD83D\uDC57' },
-  { name: 'Lifestyle Products', emoji: '\u2728' },
-  { name: 'Fitness & Wellness', emoji: '\uD83D\uDCAA' },
-  { name: 'Kitchen & Home', emoji: '\uD83C\uDFE0' },
-  { name: 'Beauty & Skincare', emoji: '\uD83D\uDC84' },
-  { name: 'Pet Products', emoji: '\uD83D\uDC3E' },
-  { name: 'Outdoor & Travel', emoji: '\uD83C\uDF0D' },
-  { name: 'Car Accessories', emoji: '\uD83D\uDE97' },
-  { name: 'Party & Events', emoji: '\uD83C\uDF89' },
-  { name: 'Stationery', emoji: '\uD83D\uDCDD' },
+  { name: 'Room Decor & LED', emoji: '💡' },
+  { name: 'Gaming Accessories', emoji: '🎮' },
+  { name: 'Tech Gadgets', emoji: '📱' },
+  { name: 'Phone Accessories', emoji: '📞' },
+  { name: 'Desk Setup', emoji: '🖥️' },
+  { name: 'Creator Tools', emoji: '🎬' },
+  { name: 'Fashion Accessories', emoji: '👗' },
+  { name: 'Lifestyle Products', emoji: '✨' },
+  { name: 'Fitness & Wellness', emoji: '💪' },
+  { name: 'Kitchen & Home', emoji: '🏠' },
+  { name: 'Beauty & Skincare', emoji: '💄' },
+  { name: 'Pet Products', emoji: '🐾' },
+  { name: 'Outdoor & Travel', emoji: '🌍' },
+  { name: 'Car Accessories', emoji: '🚗' },
+  { name: 'Party & Events', emoji: '🎉' },
+  { name: 'Stationery', emoji: '📝' },
 ];
 
 const COUNTRY_OPTIONS = [
-  { label: '\uD83C\uDDFA\uD83C\uDDF8 United States', value: 'US' },
-  { label: '\uD83C\uDDEC\uD83C\uDDE7 United Kingdom', value: 'GB' },
-  { label: '\uD83C\uDDE8\uD83C\uDDE6 Canada', value: 'CA' },
-  { label: '\uD83C\uDDE6\uD83C\uDDFA Australia', value: 'AU' },
-  { label: '\uD83C\uDDE9\uD83C\uDDEA Germany', value: 'DE' },
-  { label: '\uD83C\uDDEB\uD83C\uDDF7 France', value: 'FR' },
-  { label: '\uD83C\uDDEA\uD83C\uDDF8 Spain', value: 'ES' },
-  { label: '\uD83C\uDDEE\uD83C\uDDF9 Italy', value: 'IT' },
-  { label: '\uD83C\uDDF3\uD83C\uDDF1 Netherlands', value: 'NL' },
-  { label: '\uD83C\uDDEA\uD83C\uDDFA Europe (All EU)', value: 'EU' },
-  { label: '\uD83C\uDF0D Worldwide', value: 'WORLD' },
+  { label: 'US - United States', value: 'US' },
+  { label: 'GB - United Kingdom', value: 'GB' },
+  { label: 'CA - Canada', value: 'CA' },
+  { label: 'AU - Australia', value: 'AU' },
+  { label: 'DE - Germany', value: 'DE' },
+  { label: 'FR - France', value: 'FR' },
+  { label: 'ES - Spain', value: 'ES' },
+  { label: 'IT - Italy', value: 'IT' },
+  { label: 'NL - Netherlands', value: 'NL' },
+  { label: 'EU - Europe (All EU)', value: 'EU' },
+  { label: 'WORLD - Worldwide', value: 'WORLD' },
 ];
 
 export function OnboardingPage() {
@@ -142,7 +142,7 @@ export function OnboardingPage() {
                     fontWeight={i === step ? 'bold' : 'regular'}
                     tone={i < step ? 'success' : i === step ? undefined : 'subdued'}
                   >
-                    {i < step ? '\u2713 ' : ''}{s}
+                    {i < step ? '✓ ' : ''}{s}
                   </Text>
                 ))}
               </InlineStack>
@@ -172,7 +172,7 @@ export function OnboardingPage() {
                 multiline={4}
                 placeholder="Example: We sell cool, flex-worthy gadgets for Gen-Z and young adults. Think LED room aesthetic products, gaming desk accessories, TikTok viral gadgets, and creator tools. Products should feel social-media-friendly and show-off worthy."
                 autoComplete="off"
-                helpText={`${form.storeDescription.length} characters \u2014 aim for 50+`}
+                helpText={`${form.storeDescription.length} characters — aim for 50+`}
               />
               <TextField
                 label="Your Store Domain"
@@ -281,7 +281,7 @@ export function OnboardingPage() {
               {form.preferredCategories.filter(c => !CATEGORIES.map(x => x.name).includes(c)).length > 0 && (
                 <InlineStack gap="200" wrap>
                   {form.preferredCategories.filter(c => !CATEGORIES.map(x => x.name).includes(c)).map(c => (
-                    <Badge key={c} tone="success">{c} <span onClick={() => toggleInArray('preferredCategories', c)} style={{ cursor: 'pointer' }}>\u2715</span></Badge>
+                    <Badge key={c} tone="success">{c} <span onClick={() => toggleInArray('preferredCategories', c)} style={{ cursor: 'pointer' }}>✕</span></Badge>
                   ))}
                 </InlineStack>
               )}
@@ -290,7 +290,7 @@ export function OnboardingPage() {
 
               <Text as="h3" variant="headingSm">Categories to Avoid</Text>
               <Text as="p" variant="bodySm" tone="subdued">
-                Optional \u2014 products from these will be filtered out.
+                Optional — products from these will be filtered out.
               </Text>
               <InlineStack gap="200" wrap>
                 {CATEGORIES.filter(c => !form.preferredCategories.includes(c.name)).map(({ name, emoji }) => (
@@ -301,7 +301,7 @@ export function OnboardingPage() {
                     size="slim"
                     onClick={() => toggleInArray('bannedCategories', name)}
                   >
-                    {form.bannedCategories.includes(name) ? '\u2715 ' : ''}{emoji} {name}
+                    {form.bannedCategories.includes(name) ? '✕ ' : ''}{emoji} {name}
                   </Button>
                 ))}
               </InlineStack>
@@ -386,19 +386,19 @@ export function OnboardingPage() {
               {[
                 {
                   value: 'MANUAL', title: 'Manual Mode',
-                  icon: '\uD83D\uDD90\uFE0F',
+                  icon: '🖐️',
                   desc: 'You review and approve every replacement. Full control.',
                   color: '#F0F5FF',
                 },
                 {
                   value: 'AUTOMATIC', title: 'Automatic Mode',
-                  icon: '\uD83E\uDD16',
+                  icon: '🤖',
                   desc: 'Products are auto-replaced when they hit your thresholds. Hands-off.',
                   color: '#F1F8F5',
                 },
                 {
                   value: 'HYBRID', title: 'Hybrid Mode (Recommended)',
-                  icon: '\u26A1',
+                  icon: '⚡',
                   desc: 'High-confidence replacements happen automatically. Uncertain ones need your approval.',
                   color: '#FFF8E6',
                 },
@@ -445,7 +445,7 @@ export function OnboardingPage() {
               disabled={step === 0}
               onClick={() => setStep((s) => s - 1)}
             >
-              \u2190 Back
+              ← Back
             </Button>
 
             {step < STEPS.length - 1 ? (
@@ -454,7 +454,7 @@ export function OnboardingPage() {
                 onClick={() => setStep((s) => s + 1)}
                 disabled={!canProceed()}
               >
-                Next Step \u2192
+                Next Step →
               </Button>
             ) : (
               <Button

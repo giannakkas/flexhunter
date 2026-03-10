@@ -11,6 +11,7 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const { data: settings, get, loading } = useApi<any>();
   const { put, loading: saving, error } = useApi();
+  const { post: resetPost } = useApi();
   const [form, setForm] = useState<any>(null);
   const [saved, setSaved] = useState(false);
 
@@ -27,6 +28,12 @@ export function SettingsPage() {
     const { id, shopId, createdAt, updatedAt, ...data } = form;
     await put('/settings', data);
     setSaved(true);
+  };
+
+  const handleReset = async () => {
+    if (!window.confirm('Are you sure? This will reset all settings and restart onboarding.')) return;
+    await put('/settings', { onboardingComplete: false });
+    navigate('/onboarding');
   };
 
   if (loading) {
@@ -159,6 +166,20 @@ export function SettingsPage() {
               onChange={(v) => updateForm('maxCandidatesPerRun', v)}
               min={10} max={100} step={5} output
             />
+          </BlockStack>
+        </Card>
+
+        {/* Danger Zone */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd" tone="critical">Danger Zone</Text>
+            <Divider />
+            <Text as="p" variant="bodySm" tone="subdued">
+              Reset all settings and start the onboarding wizard again. This does not delete imported products.
+            </Text>
+            <Button tone="critical" onClick={handleReset}>
+              Reset Settings & Start Over
+            </Button>
           </BlockStack>
         </Card>
 

@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import {
-  Page, Layout, Card, Text, BlockStack, InlineStack,
+  Page, Card, Text, BlockStack, InlineStack,
   Badge, Button, Banner, ProgressBar, Divider,
-  InlineGrid,
+  InlineGrid, EmptyState, Spinner,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
@@ -25,12 +25,186 @@ interface OnboardingStatus {
   settings: any;
 }
 
+// ── Animated Number Component ──────────────────
+function OdometerNumber({ value, prefix = '', suffix = '' }: { value: number; prefix?: string; suffix?: string }) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    const duration = 800;
+    const start = display;
+    const diff = value - start;
+    const startTime = Date.now();
+
+    const animate = () => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3); // ease-out cubic
+      setDisplay(Math.round(start + diff * eased));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [value]);
+
+  return (
+    <span style={{
+      fontFamily: "'SF Mono', 'Roboto Mono', 'Courier New', monospace",
+      fontSize: 32,
+      fontWeight: 700,
+      letterSpacing: '-0.5px',
+      lineHeight: 1,
+    }}>
+      {prefix}{typeof value === 'number' && value % 1 !== 0 ? display.toFixed(2) : display.toLocaleString()}{suffix}
+    </span>
+  );
+}
+
+// ── Research Progress Component ────────────────
+function ResearchProgress({ shopId, onComplete }: { shopId: string; onComplete: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [status, setStatus] = useState('Starting research pipeline...');
+  const { get } = useApi<any>();
+  const intervalRef = useRef<any>(null);
+
+  const stages = [
+    { at: 5, text: 'Analyzing store DNA...' },
+    { at: 15, text: 'Scanning domain identity...' },
+    { at: 25, text: 'Loading merchant preferences...' },
+    { at: 35, text: 'Searching product providers...' },
+    { at: 50, text: 'Fetching candidate products...' },
+    { at: 60, text: 'Normalizing product data...' },
+    { at: 70, text: 'Running 11-dimension scoring...' },
+    { at: 80, text: 'AI analyzing product fit...' },
+    { at: 90, text: 'Ranking and saving candidates...' },
+    { at: 95, text: 'Generating explanations...' },
+    { at: 100, text: 'Research complete!' },
+  ];
+
+  useEffect(() => {
+    // Simulate progress + poll real status
+    let currentProgress = 0;
+
+    intervalRef.current = setInterval(() => {
+      currentProgress += Math.random() * 4 + 1;
+      if (currentProgress > 98) currentProgress = 98;
+
+      setProgress(Math.min(currentProgress, 98));
+
+      const stage = [...stages].reverse().find(s => currentProgress >= s.at);
+      if (stage) setStatus(stage.text);
+    }, 600);
+
+    // Also poll the actual job status
+    const pollJob = setInterval(async () => {
+      const result = await get('/research/status');
+      if (result && (result as any).status === 'COMPLETED') {
+        setProgress(100);
+        setStatus('Research complete! Found new candidates.');
+        clearInterval(intervalRef.current);
+        clearInterval(pollJob);
+        setTimeout(onComplete, 1500);
+      } else if (result && (result as any).status === 'FAILED') {
+        setStatus('Research encountered an issue. Check logs.');
+        clearInterval(intervalRef.current);
+        clearInterval(pollJob);
+        setTimeout(onComplete, 2000);
+      }
+    }, 3000);
+
+    return () => {
+      clearInterval(intervalRef.current);
+      clearInterval(pollJob);
+    };
+  }, []);
+
+  const isComplete = progress >= 100;
+
+  return (
+    <Card>
+      <BlockStack gap="300">
+        <InlineStack align="space-between" blockAlign="center">
+          <InlineStack gap="200" blockAlign="center">
+            {!isComplete && <Spinner size="small" />}
+            <Text as="h3" variant="headingMd">
+              {isComplete ? '✅' : '🔬'} Product Research
+            </Text>
+          </InlineStack>
+          <Text as="span" variant="headingSm" fontWeight="bold">
+            {Math.round(progress)}%
+          </Text>
+        </InlineStack>
+        <div style={{
+          height: 8, borderRadius: 4, overflow: 'hidden',
+          background: '#E4E5E7',
+        }}>
+          <div style={{
+            height: '100%', borderRadius: 4,
+            background: isComplete
+              ? 'linear-gradient(90deg, #008060, #00B386)'
+              : 'linear-gradient(90deg, #5C6AC4, #7C8AE4)',
+            width: `${progress}%`,
+            transition: 'width 0.5s ease-out',
+          }} />
+        </div>
+        <Text as="p" variant="bodySm" tone="subdued">{status}</Text>
+      </BlockStack>
+    </Card>
+  );
+}
+
+// ── Stat Card Component ────────────────────────
+function StatCard({ label, value, prefix, suffix, sub, color, onClick }: {
+  label: string; value: number; prefix?: string; suffix?: string;
+  sub?: string; color: string; onClick?: () => void;
+}) {
+  return (
+    <div onClick={onClick} style={{ cursor: onClick ? 'pointer' : 'default' }}>
+      <Card>
+        <BlockStack gap="200">
+          <InlineStack gap="200" blockAlign="center">
+            <div style={{
+              width: 8, height: 8, borderRadius: '50%', background: color,
+            }} />
+            <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
+          </InlineStack>
+          <OdometerNumber value={value} prefix={prefix} suffix={suffix} />
+          {sub && <Text as="p" variant="bodySm" tone="subdued">{sub}</Text>}
+        </BlockStack>
+      </Card>
+    </div>
+  );
+}
+
+// ── Health Gauge Component ─────────────────────
+function HealthGauge({ score }: { score: number }) {
+  const color = score >= 60 ? '#008060' : score >= 30 ? '#B98900' : score > 0 ? '#D72C0D' : '#8C9196';
+  const rotation = (score / 100) * 180 - 90;
+
+  return (
+    <div style={{ textAlign: 'center', padding: '8px 0' }}>
+      <svg width="140" height="80" viewBox="0 0 140 80">
+        {/* Background arc */}
+        <path d="M 10 75 A 60 60 0 0 1 130 75" fill="none" stroke="#E4E5E7" strokeWidth="10" strokeLinecap="round" />
+        {/* Score arc */}
+        <path d="M 10 75 A 60 60 0 0 1 130 75" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round"
+          strokeDasharray={`${(score / 100) * 188.5} 188.5`} />
+        {/* Score text */}
+        <text x="70" y="68" textAnchor="middle" fill={color} fontSize="24" fontWeight="bold"
+          fontFamily="'SF Mono', monospace">{score}</text>
+        <text x="70" y="78" textAnchor="middle" fill="#8C9196" fontSize="9">/100</text>
+      </svg>
+    </div>
+  );
+}
+
+// ── Main Dashboard ─────────────────────────────
+
 export function DashboardPage() {
   const navigate = useNavigate();
   const { data: stats, loading, get } = useApi<DashboardData>();
   const { data: onboarding, get: getOnboarding } = useApi<OnboardingStatus>();
   const { post: startResearch, loading: researchLoading } = useApi();
   const { post: syncPerf, loading: syncLoading } = useApi();
+  const [showResearchProgress, setShowResearchProgress] = useState(false);
 
   useEffect(() => {
     get('/dashboard');
@@ -38,199 +212,152 @@ export function DashboardPage() {
   }, [get, getOnboarding]);
 
   const handleResearch = async () => {
+    setShowResearchProgress(true);
     await startResearch('/research/start');
-    setTimeout(() => get('/dashboard'), 2000);
+  };
+
+  const handleResearchComplete = () => {
+    setShowResearchProgress(false);
+    get('/dashboard');
   };
 
   const handleSync = async () => {
     await syncPerf('/performance/sync');
-    setTimeout(() => get('/dashboard'), 2000);
+    setTimeout(() => get('/dashboard'), 1500);
   };
 
   const isNew = !onboarding?.isComplete;
   const hasNoCandidates = (stats?.totalCandidates || 0) === 0;
   const hasNoImports = (stats?.totalImported || 0) === 0;
 
-  // ── Welcome Screen for New Users ─────────────
+  // ── Welcome Screen ───────────────────────────
   if (isNew && !loading) {
     return (
       <Page title="">
-        <BlockStack gap="600">
-          {/* Hero */}
+        <BlockStack gap="500">
           <Card>
-            <BlockStack gap="400">
-              <div style={{
-                background: 'linear-gradient(135deg, #1A1A2E 0%, #16213E 50%, #0F3460 100%)',
-                borderRadius: 12, padding: '32px 28px', color: 'white',
-              }}>
-                <BlockStack gap="300">
-                  <Text as="h1" variant="headingXl">
-                    Welcome to FlexHunter
-                  </Text>
-                  <Text as="p" variant="bodyLg">
-                    Your AI-powered product hunter. Describe your store, sit back, and watch the magic happen.
-                    We'll find the perfect products, import them, track performance, and replace underperformers automatically.
-                  </Text>
-                  <div style={{ paddingTop: 8 }}>
-                    <Button variant="primary" size="large" onClick={() => navigate('/onboarding')}>
-                      Get Started — 2 min setup →
-                    </Button>
-                  </div>
-                </BlockStack>
-              </div>
-            </BlockStack>
+            <div style={{
+              background: 'linear-gradient(135deg, #0D1117 0%, #161B22 40%, #1A2332 100%)',
+              borderRadius: 12, padding: '36px 32px', color: 'white',
+            }}>
+              <BlockStack gap="300">
+                <div style={{ fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', color: '#58A6FF', fontWeight: 600 }}>
+                  PRODUCT INTELLIGENCE
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>
+                  Welcome to FlexHunter
+                </div>
+                <div style={{ fontSize: 15, color: '#8B949E', lineHeight: 1.5, maxWidth: 600 }}>
+                  Describe your store, sit back, and watch the magic happen. Our AI finds
+                  the perfect products, imports them, tracks performance, and replaces underperformers.
+                </div>
+                <div style={{ paddingTop: 12 }}>
+                  <Button variant="primary" size="large" onClick={() => navigate('/onboarding')}>
+                    Get Started — 2 min setup
+                  </Button>
+                </div>
+              </BlockStack>
+            </div>
           </Card>
 
-          {/* Steps */}
           <InlineGrid columns={3} gap="400">
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
+            {[
+              { n: '01', title: 'Describe Your Store', desc: 'Tell us your audience, vibe, and niche.', active: true },
+              { n: '02', title: 'Run Research', desc: 'AI searches for matching products.', active: false },
+              { n: '03', title: 'Import Winners', desc: 'Approve and import to Shopify.', active: false },
+            ].map((step) => (
+              <Card key={step.n}>
+                <BlockStack gap="200">
                   <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    background: 'linear-gradient(135deg, #5C6AC4, #202E78)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: 'white', fontWeight: 'bold', fontSize: 16,
-                  }}>1</div>
-                  <Text as="h3" variant="headingMd">Describe Your Store</Text>
-                </InlineStack>
-                <Text as="p" tone="subdued">
-                  Tell us about your audience, vibe, and niche.
-                  This powers all product recommendations.
-                </Text>
-                <Button variant="primary" onClick={() => navigate('/onboarding')} fullWidth>
-                  Start Setup
-                </Button>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    background: '#E4E5E7',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#6D7175', fontWeight: 'bold', fontSize: 16,
-                  }}>2</div>
-                  <Text as="h3" variant="headingMd" tone="subdued">Run Research</Text>
-                </InlineStack>
-                <Text as="p" tone="subdued">
-                  AI searches for products matching your store DNA,
-                  domain identity, and target audience.
-                </Text>
-                <Button disabled fullWidth>Complete Step 1 First</Button>
-              </BlockStack>
-            </Card>
-
-            <Card>
-              <BlockStack gap="300">
-                <InlineStack gap="200" blockAlign="center">
-                  <div style={{
-                    width: 36, height: 36, borderRadius: '50%',
-                    background: '#E4E5E7',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#6D7175', fontWeight: 'bold', fontSize: 16,
-                  }}>3</div>
-                  <Text as="h3" variant="headingMd" tone="subdued">Import Winners</Text>
-                </InlineStack>
-                <Text as="p" tone="subdued">
-                  Review scored candidates, approve the best ones,
-                  and import directly to Shopify.
-                </Text>
-                <Button disabled fullWidth>Complete Step 2 First</Button>
-              </BlockStack>
-            </Card>
+                    fontSize: 11, fontWeight: 700, color: step.active ? '#5C6AC4' : '#8C9196',
+                    letterSpacing: 1.5,
+                  }}>STEP {step.n}</div>
+                  <Text as="h3" variant="headingSm">{step.title}</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">{step.desc}</Text>
+                  {step.active ? (
+                    <Button variant="primary" onClick={() => navigate('/onboarding')} fullWidth size="slim">
+                      Start
+                    </Button>
+                  ) : (
+                    <Button disabled fullWidth size="slim">Locked</Button>
+                  )}
+                </BlockStack>
+              </Card>
+            ))}
           </InlineGrid>
-
-          {/* How it works */}
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h3" variant="headingMd">How It Works</Text>
-              <Divider />
-              <InlineGrid columns={4} gap="400">
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingSm">🧬 Store DNA</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Your domain, description, and catalog create a unique profile.
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingSm">🔍 Deep Research</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Products scored across 11 dimensions including domain fit and trend.
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingSm">📊 Smart Testing</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Track views, conversions, and revenue automatically.
-                  </Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="p" variant="headingSm">🔄 Auto-Optimize</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">
-                    Underperformers get replaced with better-fit products.
-                  </Text>
-                </BlockStack>
-              </InlineGrid>
-            </BlockStack>
-          </Card>
         </BlockStack>
       </Page>
     );
   }
 
-  // ── Active Dashboard ─────────────────────────
   if (loading || !stats) {
-    return (
-      <Page title="Dashboard">
-        <Card><Text as="p">Loading...</Text></Card>
-      </Page>
-    );
+    return <Page title="Dashboard"><Card><Spinner /></Card></Page>;
   }
 
   const setupSteps = [
-    { done: onboarding?.isComplete, label: 'Setup Complete' },
-    { done: stats.totalCandidates > 0, label: 'First Research' },
-    { done: stats.totalImported > 0, label: 'First Import' },
+    { done: onboarding?.isComplete, label: 'Setup' },
+    { done: stats.totalCandidates > 0, label: 'Research' },
+    { done: stats.totalImported > 0, label: 'Import' },
   ];
   const completedSteps = setupSteps.filter(s => s.done).length;
-  const setupProgress = (completedSteps / setupSteps.length) * 100;
 
   return (
-    <Page
-      title="Dashboard"
-      primaryAction={{
-        content: '🔍 Run Research',
-        onAction: handleResearch,
-        loading: researchLoading,
-      }}
-      secondaryActions={[
-        { content: 'Sync Performance', onAction: handleSync, loading: syncLoading },
-      ]}
-    >
+    <Page title="">
       <BlockStack gap="500">
 
-        {/* Progress Tracker */}
-        {setupProgress < 100 && (
+        {/* ── Header Bar ──────────────────────── */}
+        <Card>
+          <div style={{
+            background: 'linear-gradient(135deg, #0D1117 0%, #161B22 40%, #1A2332 100%)',
+            borderRadius: 10, padding: '20px 24px',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 10,
+                background: 'linear-gradient(135deg, #5C6AC4, #8B5CF6)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 20,
+              }}>⚡</div>
+              <div>
+                <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>FlexHunter</div>
+                <div style={{ color: '#8B949E', fontSize: 12 }}>Product Intelligence Dashboard</div>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <Button onClick={() => navigate('/')} size="slim">Dashboard</Button>
+              <Button onClick={handleSync} loading={syncLoading} size="slim">Sync Performance</Button>
+              <Button variant="primary" onClick={handleResearch} loading={researchLoading} size="slim">
+                Run Research
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* ── Research Progress ────────────────── */}
+        {showResearchProgress && (
+          <ResearchProgress shopId="" onComplete={handleResearchComplete} />
+        )}
+
+        {/* ── Setup Progress ──────────────────── */}
+        {completedSteps < 3 && !showResearchProgress && (
           <Card>
-            <BlockStack gap="300">
+            <BlockStack gap="200">
               <InlineStack align="space-between">
-                <Text as="h3" variant="headingMd">🎯 Getting Started</Text>
-                <Badge tone={setupProgress === 100 ? 'success' : 'attention'}>
-                  {completedSteps}/{setupSteps.length}
+                <Text as="h3" variant="headingSm">Getting Started</Text>
+                <Badge tone={completedSteps === 3 ? 'success' : 'attention'}>
+                  {completedSteps}/3
                 </Badge>
               </InlineStack>
-              <ProgressBar progress={setupProgress} tone="primary" size="small" />
+              <ProgressBar progress={(completedSteps / 3) * 100} tone="primary" size="small" />
               <InlineStack gap="400">
                 {setupSteps.map((step, i) => (
                   <InlineStack key={i} gap="100" blockAlign="center">
                     <div style={{
-                      width: 20, height: 20, borderRadius: '50%',
-                      background: step.done ? '#008060' : '#E4E5E7',
+                      width: 18, height: 18, borderRadius: '50%',
+                      background: step.done ? '#008060' : '#D0D5DD',
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'white', fontSize: 11, fontWeight: 'bold',
+                      color: 'white', fontSize: 10, fontWeight: 700,
                     }}>{step.done ? '✓' : ''}</div>
                     <Text as="span" variant="bodySm" tone={step.done ? undefined : 'subdued'}>
                       {step.label}
@@ -239,20 +366,20 @@ export function DashboardPage() {
                 ))}
               </InlineStack>
               {hasNoCandidates && (
-                <Button variant="primary" onClick={handleResearch} loading={researchLoading}>
-                  Run Your First Research →
+                <Button variant="primary" onClick={handleResearch} loading={researchLoading} fullWidth>
+                  Run Your First Research
                 </Button>
               )}
               {!hasNoCandidates && hasNoImports && (
-                <Button variant="primary" onClick={() => navigate('/candidates')}>
-                  Review & Import Candidates →
+                <Button variant="primary" onClick={() => navigate('/candidates')} fullWidth>
+                  Review & Import Candidates
                 </Button>
               )}
             </BlockStack>
           </Card>
         )}
 
-        {/* Alerts */}
+        {/* ── Alerts ──────────────────────────── */}
         {stats.pendingReplacements > 0 && (
           <Banner
             title={`${stats.pendingReplacements} product(s) need attention`}
@@ -261,116 +388,104 @@ export function DashboardPage() {
           />
         )}
 
-        {/* Stat Cards */}
-        <InlineGrid columns={3} gap="400">
-          <div style={{ cursor: 'pointer' }} onClick={() => navigate('/candidates')}>
-            <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">🔎 Candidates</Text>
-                <Text as="p" variant="heading2xl">{stats.totalCandidates}</Text>
-                <Text as="p" variant="bodySm" tone="subdued">products found</Text>
-              </BlockStack>
-            </Card>
-          </div>
-          <div style={{ cursor: 'pointer' }} onClick={() => navigate('/imports')}>
-            <Card>
-              <BlockStack gap="100">
-                <Text as="p" variant="bodySm" tone="subdued">📦 Imported</Text>
-                <Text as="p" variant="heading2xl">{stats.totalImported}</Text>
-                <Text as="p" variant="bodySm" tone="subdued">
-                  {stats.totalTesting} testing · {stats.totalWinners} winners
-                </Text>
-              </BlockStack>
-            </Card>
-          </div>
-          <Card>
-            <BlockStack gap="100">
-              <Text as="p" variant="bodySm" tone="subdued">💰 Revenue</Text>
-              <Text as="p" variant="heading2xl">${stats.totalRevenue.toFixed(2)}</Text>
-              <Text as="p" variant="bodySm" tone="subdued">from imported products</Text>
-            </BlockStack>
-          </Card>
+        {/* ── Stat Cards (Odometer Style) ─────── */}
+        <InlineGrid columns={4} gap="400">
+          <StatCard
+            label="Candidates" value={stats.totalCandidates} color="#5C6AC4"
+            sub="products found" onClick={() => navigate('/candidates')}
+          />
+          <StatCard
+            label="Imported" value={stats.totalImported} color="#007ACE"
+            sub={`${stats.totalTesting} testing · ${stats.totalWinners} winners`}
+            onClick={() => navigate('/imports')}
+          />
+          <StatCard
+            label="Revenue" value={stats.totalRevenue} prefix="$" color="#008060"
+            sub="from imported products"
+          />
+          <StatCard
+            label="Weak Products" value={stats.totalWeak} color="#D72C0D"
+            sub={stats.totalWeak > 0 ? 'need replacement' : 'none detected'}
+          />
         </InlineGrid>
 
-        {/* Pipeline + Health */}
+        {/* ── Health + Pipeline ────────────────── */}
         <InlineGrid columns={2} gap="400">
           <Card>
-            <BlockStack gap="400">
-              <Text as="h3" variant="headingMd">📊 Product Pipeline</Text>
+            <BlockStack gap="300">
+              <Text as="h3" variant="headingSm">Catalog Health</Text>
               <Divider />
-              {[
-                { label: 'Testing', count: stats.totalTesting, color: '#FFC453', tone: 'attention' as const },
-                { label: 'Winners', count: stats.totalWinners, color: '#008060', tone: 'success' as const },
-                { label: 'Weak', count: stats.totalWeak, color: '#D72C0D', tone: 'critical' as const },
-                { label: 'Pending Replacement', count: stats.pendingReplacements, color: '#9C6ADE', tone: 'warning' as const },
-              ].map((item) => (
-                <InlineStack key={item.label} align="space-between">
-                  <InlineStack gap="200" blockAlign="center">
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: item.color }} />
-                    <Text as="span">{item.label}</Text>
-                  </InlineStack>
-                  <Badge tone={item.tone}>{item.count}</Badge>
-                </InlineStack>
-              ))}
-            </BlockStack>
-          </Card>
-
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h3" variant="headingMd">❤️ Catalog Health</Text>
-              <Divider />
-              <InlineStack align="space-between">
-                <Text as="span">Health Score</Text>
-                <Text as="span" variant="headingLg" fontWeight="bold">{stats.avgHealthScore}/100</Text>
-              </InlineStack>
-              <ProgressBar
-                progress={stats.avgHealthScore}
-                tone={stats.avgHealthScore >= 60 ? 'success' : stats.avgHealthScore >= 30 ? 'highlight' : 'critical'}
-                size="small"
-              />
+              <HealthGauge score={stats.avgHealthScore} />
               <div style={{
-                padding: '12px 16px', borderRadius: 8,
+                padding: '10px 14px', borderRadius: 8,
                 background: stats.avgHealthScore >= 60 ? '#F1F8F5'
                   : stats.avgHealthScore >= 30 ? '#FFF8E6'
                   : stats.avgHealthScore > 0 ? '#FFF4F4' : '#F6F6F7',
+                textAlign: 'center',
               }}>
                 <Text as="p" variant="bodySm">
-                  {stats.avgHealthScore >= 60 ? '✅ Catalog performing well!'
-                    : stats.avgHealthScore >= 30 ? '⚡ Room for improvement — run research for fresh candidates.'
-                    : stats.avgHealthScore > 0 ? '🔴 Products need attention. Check replacement queue.'
-                    : '📋 No data yet. Import products to start tracking.'}
+                  {stats.avgHealthScore >= 60 ? 'Catalog performing well!'
+                    : stats.avgHealthScore >= 30 ? 'Room for improvement.'
+                    : stats.avgHealthScore > 0 ? 'Products need attention.'
+                    : 'No data yet. Import products to start.'}
                 </Text>
               </div>
-              <Divider />
               <Text as="p" variant="bodySm" tone="subdued">
-                Last research: {stats.lastResearchAt ? new Date(stats.lastResearchAt).toLocaleDateString() : 'Never'}
+                Research: {stats.lastResearchAt ? new Date(stats.lastResearchAt).toLocaleDateString() : 'Never'}
                 {' · '}
-                Last sync: {stats.lastSyncAt ? new Date(stats.lastSyncAt).toLocaleDateString() : 'Never'}
+                Sync: {stats.lastSyncAt ? new Date(stats.lastSyncAt).toLocaleDateString() : 'Never'}
               </Text>
+            </BlockStack>
+          </Card>
+
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h3" variant="headingSm">Product Pipeline</Text>
+              <Divider />
+              {[
+                { label: 'Testing', count: stats.totalTesting, color: '#FFC453' },
+                { label: 'Winners', count: stats.totalWinners, color: '#008060' },
+                { label: 'Weak', count: stats.totalWeak, color: '#D72C0D' },
+                { label: 'Pending Replace', count: stats.pendingReplacements, color: '#9C6ADE' },
+              ].map((item) => (
+                <div key={item.label} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '8px 12px', borderRadius: 6, background: '#FAFBFC',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: item.color }} />
+                    <span style={{ fontSize: 13 }}>{item.label}</span>
+                  </div>
+                  <span style={{
+                    fontFamily: "'SF Mono', monospace", fontWeight: 700, fontSize: 15,
+                    color: item.count > 0 ? item.color : '#8C9196',
+                  }}>{item.count}</span>
+                </div>
+              ))}
             </BlockStack>
           </Card>
         </InlineGrid>
 
-        {/* Quick Actions */}
+        {/* ── Quick Actions ───────────────────── */}
         <InlineGrid columns={3} gap="400">
           <Card>
             <BlockStack gap="200">
-              <Text as="h3" variant="headingSm">🔬 Research Console</Text>
-              <Text as="p" variant="bodySm" tone="subdued">Store DNA, domain analysis, trigger research.</Text>
+              <Text as="h3" variant="headingSm">Research Console</Text>
+              <Text as="p" variant="bodySm" tone="subdued">Store DNA, domain analysis, triggers.</Text>
               <Button onClick={() => navigate('/research')} fullWidth>Open</Button>
             </BlockStack>
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="h3" variant="headingSm">⚙️ Automation</Text>
-              <Text as="p" variant="bodySm" tone="subdued">Replacement mode, thresholds, test rules.</Text>
+              <Text as="h3" variant="headingSm">Automation</Text>
+              <Text as="p" variant="bodySm" tone="subdued">Replacement mode, thresholds.</Text>
               <Button onClick={() => navigate('/settings')} fullWidth>Configure</Button>
             </BlockStack>
           </Card>
           <Card>
             <BlockStack gap="200">
-              <Text as="h3" variant="headingSm">📜 Audit Log</Text>
-              <Text as="p" variant="bodySm" tone="subdued">Every decision explained and logged.</Text>
+              <Text as="h3" variant="headingSm">Audit Log</Text>
+              <Text as="p" variant="bodySm" tone="subdued">Every decision logged.</Text>
               <Button onClick={() => navigate('/audit')} fullWidth>View</Button>
             </BlockStack>
           </Card>
