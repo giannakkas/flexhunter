@@ -124,8 +124,7 @@ export function ImportsPage() {
           </IndexTable>
         </Card>
       )}
-        <div style={{ height: 60 }} />
-      </BlockStack>
+      <div style={{ height: 60 }} />
     </Page>
   );
 }
