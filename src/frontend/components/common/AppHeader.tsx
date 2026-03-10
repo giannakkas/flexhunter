@@ -1,5 +1,4 @@
 import React from 'react';
-import { InlineStack, Text, Button } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 
 export function AppHeader() {
@@ -18,13 +17,33 @@ export function AppHeader() {
           <div style={{ color: '#8B949E', fontSize: 11 }}>Product Discovery Intelligence</div>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <Button size="slim" onClick={() => navigate('/')}>Dashboard</Button>
-        <Button size="slim" onClick={() => navigate('/research')}>Research</Button>
-        <Button size="slim" onClick={() => navigate('/candidates')}>Candidates</Button>
-        <Button size="slim" onClick={() => navigate('/imports')}>Imported</Button>
-        <Button size="slim" variant="primary" onClick={() => navigate('/seo')}>SEO</Button>
+      <div style={{ display: 'flex', gap: 6 }}>
+        <button onClick={() => navigate('/')} style={btnStyle}>Dashboard</button>
+        <button onClick={() => navigate('/research')} style={btnStyle}>Research</button>
+        <button onClick={() => navigate('/candidates')} style={btnStyle}>Candidates</button>
+        <button onClick={() => navigate('/imports')} style={btnStyle}>Imported</button>
+        <button onClick={() => navigate('/seo')} style={{
+          ...btnStyle,
+          background: 'linear-gradient(135deg, #007ACE, #5C6AC4)',
+          color: 'white',
+          border: '1px solid #5C6AC4',
+          boxShadow: '0 0 12px rgba(92, 106, 196, 0.5)',
+          animation: 'seoGlow 2s ease-in-out infinite',
+        }}>SEO Optimizer</button>
       </div>
     </div>
   );
 }
+
+const btnStyle: React.CSSProperties = {
+  padding: '6px 14px',
+  fontSize: 12,
+  fontWeight: 600,
+  borderRadius: 6,
+  border: '1px solid #30363D',
+  background: '#21262D',
+  color: '#C9D1D9',
+  cursor: 'pointer',
+  transition: 'all 0.2s ease',
+  whiteSpace: 'nowrap',
+};
