@@ -202,13 +202,23 @@ function ShopifyTokenSetup() {
   const [token, setToken] = useState('');
   const [status, setStatus] = useState<any>(null);
   const [saved, setSaved] = useState(false);
-  const { get } = useApi<any>();
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     apiFetch<any>('/shop-status').then(r => setStatus(r.data)).catch(() => {});
   }, [saved]);
 
-  const handleSave = async () => {
+  const handleConnect = () => {
+    const domain = status?.domain || '';
+    const url = `https://flexhunter-production.up.railway.app/api/connect-shopify?shop=${domain}`;
+    if (window.top) {
+      window.top.location.href = url;
+    } else {
+      window.location.href = url;
+    }
+  };
+
+  const handleSaveManual = async () => {
     if (!token.trim()) return;
     await apiFetch('/setup-token', { method: 'POST', body: JSON.stringify({ accessToken: token }) });
     setSaved(true);
@@ -218,22 +228,36 @@ function ShopifyTokenSetup() {
   return (
     <BlockStack gap="300">
       {status?.hasToken ? (
-        <Banner tone="success"><Text as="p">Connected to {status.domain}. Imports will create real Shopify products.</Text></Banner>
+        <Banner tone="success">
+          <Text as="p">Connected to <strong>{status.domain}</strong>. Imports create real Shopify products.</Text>
+        </Banner>
       ) : (
-        <Banner tone="warning"><Text as="p">Not connected. Imports are saved locally but not pushed to Shopify. Paste your Admin API access token below to connect.</Text></Banner>
+        <BlockStack gap="300">
+          <Banner tone="critical">
+            <Text as="p">Not connected. Products are saved locally only and won't appear in your Shopify store.</Text>
+          </Banner>
+          <Button variant="primary" size="large" onClick={handleConnect} fullWidth>
+            Connect to Shopify Automatically
+          </Button>
+          <Divider />
+          <Button variant="plain" onClick={() => setShowManual(!showManual)}>
+            {showManual ? 'Hide manual setup' : 'Or enter token manually'}
+          </Button>
+        </BlockStack>
       )}
       {saved && <Banner tone="success" onDismiss={() => setSaved(false)}><Text as="p">Token saved!</Text></Banner>}
-      <TextField
-        label="Shopify Admin API Access Token"
-        value={token}
-        onChange={setToken}
-        placeholder="shpat_... or atkn_..."
-        autoComplete="off"
-        helpText="Get this from Shopify Admin > Settings > Apps > Develop apps > Your app > Admin API access token"
-      />
-      <Button variant="primary" onClick={handleSave} disabled={!token.trim()}>
-        Save Token
-      </Button>
+      {showManual && (
+        <BlockStack gap="200">
+          <TextField
+            label="Shopify Admin API Access Token"
+            value={token} onChange={setToken}
+            placeholder="shpat_... or atkn_..."
+            autoComplete="off"
+            helpText="Shopify Admin > Settings > Apps > Develop apps > Admin API access token"
+          />
+          <Button variant="primary" onClick={handleSaveManual} disabled={!token.trim()}>Save Token</Button>
+        </BlockStack>
+      )}
     </BlockStack>
   );
 }

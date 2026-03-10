@@ -89,10 +89,21 @@ export function ImportsPage() {
         {/* Shopify connection warning */}
         {shopStatus && !shopStatus.hasToken && (
           <Banner tone="critical" title="Products are NOT appearing in your Shopify store"
-            action={{ content: 'Connect Shopify Token', onAction: () => navigate('/settings') }}>
+            action={{
+              content: 'Connect to Shopify Now',
+              onAction: () => {
+                // Open OAuth flow in top-level window (not iframe)
+                const url = `https://flexhunter-production.up.railway.app/api/connect-shopify?shop=${shopStatus.domain || ''}`;
+                if (window.top) {
+                  window.top.location.href = url;
+                } else {
+                  window.location.href = url;
+                }
+              },
+            }}>
             <Text as="p">
-              Your store access token is missing. Go to Settings and paste your Shopify Admin API
-              access token to enable real product imports. Without it, products are saved locally only.
+              Click the button to automatically connect FlexHunter with your Shopify store.
+              This grants the app permission to create and manage products on your behalf.
             </Text>
           </Banner>
         )}

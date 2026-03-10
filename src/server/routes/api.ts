@@ -871,14 +871,33 @@ router.get('/shop-status', async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: {
+        shopId: shop.id,
         domain: shop.shopDomain,
         name: shop.name,
         hasToken: shop.accessToken !== 'pending',
         isActive: shop.isActive,
+        oauthUrl: shop.accessToken === 'pending'
+          ? `/api/auth?shop=${shop.shopDomain}`
+          : null,
       },
     });
   } catch (err: any) {
-    res.json({ success: true, data: { hasToken: false } });
+    res.json({ success: true, data: { hasToken: false, oauthUrl: null } });
+  }
+});
+
+// One-click OAuth connect
+router.get('/connect-shopify', async (req: Request, res: Response) => {
+  try {
+    const shopDomain = req.query.shop as string || req.headers['x-shop-domain'] as string;
+    if (shopDomain && shopDomain !== 'unknown') {
+      return res.redirect(`/api/auth?shop=${shopDomain.includes('.myshopify.com') ? shopDomain : shopDomain + '.myshopify.com'}`);
+    }
+    const shopId = await getOrCreateShop(req);
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+    res.redirect(`/api/auth?shop=${shop.shopDomain}`);
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: 'Could not determine shop. Try reinstalling the app.' });
   }
 });
 
