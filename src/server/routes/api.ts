@@ -682,6 +682,43 @@ router.get('/audit', async (req: Request, res: Response) => {
   }
 });
 
+// ── Shop Token Setup ────────────────────────
+
+router.post('/setup-token', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { accessToken } = req.body;
+    if (!accessToken) return res.status(400).json({ error: 'accessToken required' });
+
+    await prisma.shop.update({
+      where: { id: shopId },
+      data: { accessToken },
+    });
+
+    res.json({ success: true, message: 'Access token updated. Imports will now create real Shopify products.' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/shop-status', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+    res.json({
+      success: true,
+      data: {
+        domain: shop.shopDomain,
+        name: shop.name,
+        hasToken: shop.accessToken !== 'pending',
+        isActive: shop.isActive,
+      },
+    });
+  } catch (err: any) {
+    res.json({ success: true, data: { hasToken: false } });
+  }
+});
+
 // ── Provider Request ────────────────────────
 
 router.post('/provider-request', async (req: Request, res: Response) => {

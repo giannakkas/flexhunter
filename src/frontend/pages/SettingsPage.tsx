@@ -5,7 +5,7 @@ import {
   EmptyState,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
-import { useApi } from '../hooks/useApi';
+import { useApi, apiFetch } from '../hooks/useApi';
 
 export function SettingsPage() {
   const navigate = useNavigate();
@@ -172,6 +172,15 @@ export function SettingsPage() {
         {/* Danger Zone */}
         <Card>
           <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Shopify Connection</Text>
+            <Divider />
+            <ShopifyTokenSetup />
+          </BlockStack>
+        </Card>
+
+        {/* Reset */}
+        <Card>
+          <BlockStack gap="400">
             <Text as="h2" variant="headingMd" tone="critical">Danger Zone</Text>
             <Divider />
             <Text as="p" variant="bodySm" tone="subdued">
@@ -186,5 +195,45 @@ export function SettingsPage() {
         <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
+  );
+}
+
+function ShopifyTokenSetup() {
+  const [token, setToken] = useState('');
+  const [status, setStatus] = useState<any>(null);
+  const [saved, setSaved] = useState(false);
+  const { get } = useApi<any>();
+
+  useEffect(() => {
+    apiFetch<any>('/shop-status').then(r => setStatus(r.data)).catch(() => {});
+  }, [saved]);
+
+  const handleSave = async () => {
+    if (!token.trim()) return;
+    await apiFetch('/setup-token', { method: 'POST', body: JSON.stringify({ accessToken: token }) });
+    setSaved(true);
+    setToken('');
+  };
+
+  return (
+    <BlockStack gap="300">
+      {status?.hasToken ? (
+        <Banner tone="success"><Text as="p">Connected to {status.domain}. Imports will create real Shopify products.</Text></Banner>
+      ) : (
+        <Banner tone="warning"><Text as="p">Not connected. Imports are saved locally but not pushed to Shopify. Paste your Admin API access token below to connect.</Text></Banner>
+      )}
+      {saved && <Banner tone="success" onDismiss={() => setSaved(false)}><Text as="p">Token saved!</Text></Banner>}
+      <TextField
+        label="Shopify Admin API Access Token"
+        value={token}
+        onChange={setToken}
+        placeholder="shpat_... or atkn_..."
+        autoComplete="off"
+        helpText="Get this from Shopify Admin > Settings > Apps > Develop apps > Your app > Admin API access token"
+      />
+      <Button variant="primary" onClick={handleSave} disabled={!token.trim()}>
+        Save Token
+      </Button>
+    </BlockStack>
   );
 }

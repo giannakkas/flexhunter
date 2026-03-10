@@ -71,10 +71,13 @@ router.get('/callback', async (req: Request, res: Response) => {
       }),
     });
 
-    const tokenData = await tokenResponse.json();
+    const tokenData: any = await tokenResponse.json();
     const accessToken = tokenData.access_token;
 
+    console.log(`[Auth] Token exchange for ${shop}: ${accessToken ? 'SUCCESS' : 'FAILED'}`);
+
     if (!accessToken) {
+      console.error('[Auth] Token response:', tokenData);
       return res.status(500).json({ error: 'Failed to get access token' });
     }
 
@@ -82,7 +85,7 @@ router.get('/callback', async (req: Request, res: Response) => {
     const shopInfoRes = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
       headers: { 'X-Shopify-Access-Token': accessToken },
     });
-    const shopInfo = await shopInfoRes.json();
+    const shopInfo: any = await shopInfoRes.json();
 
     // Upsert shop record
     await prisma.shop.upsert({
