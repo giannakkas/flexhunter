@@ -213,7 +213,12 @@ export function DashboardPage() {
 
   const handleResearch = async () => {
     setShowResearchProgress(true);
-    await startResearch('/research/start');
+    const result = await startResearch('/research/start');
+    // If research ran synchronously, it returns data directly
+    if (result?.data) {
+      setShowResearchProgress(false);
+      get('/dashboard');
+    }
   };
 
   const handleResearchComplete = () => {
@@ -313,12 +318,11 @@ export function DashboardPage() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <div style={{
-                width: 40, height: 40, borderRadius: 10,
-                background: 'linear-gradient(135deg, #5C6AC4, #8B5CF6)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 20,
-              }}>⚡</div>
+              <img
+                src="/logo.png"
+                alt="FlexHunter"
+                style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }}
+              />
               <div>
                 <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>FlexHunter</div>
                 <div style={{ color: '#8B949E', fontSize: 12 }}>Product Intelligence Dashboard</div>
