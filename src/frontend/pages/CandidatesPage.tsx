@@ -97,7 +97,7 @@ export function CandidatesPage() {
   // ── Row Markup (compact) ─────────────────────
   const rowMarkup = items.map((item: any, idx: number) => {
     const s = item.score; const fs = s?.finalScore || 0;
-    const sc = fs >= 70 ? '#008060' : fs >= 50 ? '#B98900' : '#D72C0D';
+    const sc = fs >= 80 ? '#008060' : fs >= 65 ? '#47B881' : fs >= 50 ? '#B98900' : fs >= 35 ? '#DE6E1E' : '#D72C0D';
     const m = item.costPrice && item.suggestedPrice ? ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100).toFixed(0) + '%' : '-';
 
     return (
@@ -141,7 +141,7 @@ export function CandidatesPage() {
     <InlineGrid columns={2} gap="400">
       {items.map((item: any) => {
         const s = item.score; const fs = s?.finalScore || 0;
-        const sc = fs >= 70 ? '#008060' : fs >= 50 ? '#B98900' : '#D72C0D';
+        const sc = fs >= 80 ? '#008060' : fs >= 65 ? '#47B881' : fs >= 50 ? '#B98900' : fs >= 35 ? '#DE6E1E' : '#D72C0D';
         const m = item.costPrice && item.suggestedPrice ? ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100).toFixed(0) : '-';
         return (
           <Card key={item.id}>

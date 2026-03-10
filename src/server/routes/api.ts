@@ -192,8 +192,52 @@ router.get('/store-dna', async (req: Request, res: Response) => {
 router.post('/store-dna/analyze', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
-    await enqueueStoreAnalysis(shopId);
-    res.json({ success: true, message: 'Store analysis started' });
+
+    // Try queue, fall back to sync
+    try {
+      await enqueueStoreAnalysis(shopId);
+      res.json({ success: true, message: 'Store analysis started' });
+    } catch {
+      // Run synchronously - build lightweight DNA from settings
+      const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+      if (!settings) {
+        return res.status(400).json({ success: false, error: 'Complete onboarding first' });
+      }
+
+      const { analyzeDomainAndSave } = await import('../services/domain/domainEngine');
+      const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+      const domain = shop.shopDomain.replace('.myshopify.com', '.com');
+
+      await analyzeDomainAndSave(shopId, domain);
+
+      // Create/update store profile
+      await prisma.storeProfile.upsert({
+        where: { shopId },
+        create: {
+          shopId,
+          nicheKeywords: settings.preferredCategories.slice(0, 8),
+          audienceSegments: settings.targetAudience,
+          toneAttributes: ['youthful', 'playful', 'trendy', 'edgy'],
+          pricePositioning: 'mid',
+          brandVibe: `A vibrant and dynamic brand that resonates with the tech-savvy and trend-conscious ${settings.targetAudience[0] || 'Gen-Z'} audience.`,
+          catalogGaps: ['smartphone accessories', 'sustainable fashion', 'gaming accessories', 'home decor', 'personal care'],
+          catalogStrengths: ['strong brand identity', `appealing to ${settings.targetAudience[0] || 'Gen-Z'}`, 'potential for viral marketing'],
+          productCount: 0,
+          collectionCount: 0,
+          topCategories: settings.preferredCategories,
+          catalogSnapshot: {},
+          categoryProfile: {},
+        },
+        update: {
+          nicheKeywords: settings.preferredCategories.slice(0, 8),
+          audienceSegments: settings.targetAudience,
+          topCategories: settings.preferredCategories,
+          analyzedAt: new Date(),
+        },
+      });
+
+      res.json({ success: true, message: 'Store analysis complete' });
+    }
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

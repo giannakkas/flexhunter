@@ -4,6 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>FlexHunter</title>
+    <style>
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes slideIn { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: translateX(0); } }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
+      @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+      .fh-fade { animation: fadeIn 0.4s ease forwards; }
+      .fh-slide { animation: slideIn 0.3s ease forwards; }
+      .fh-pulse { animation: pulse 2s ease-in-out infinite; }
+      .fh-scale { animation: scaleIn 0.3s ease forwards; }
+      .fh-hover-lift { transition: transform 0.2s ease, box-shadow 0.2s ease; }
+      .fh-hover-lift:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+    </style>
   </head>
   <body>
     <div id="root"></div>
