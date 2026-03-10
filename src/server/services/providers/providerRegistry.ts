@@ -276,14 +276,109 @@ export class ManualFeedProvider implements SourceProvider {
   }
 }
 
+// ── Zendrop Provider ───────────────────────────
+
+export class ZendropProvider implements SourceProvider {
+  type = 'CJ_DROPSHIPPING' as const; // Uses same type for DB compat, differentiated by name
+  name = 'Zendrop';
+
+  isAvailable(): boolean { return !!process.env.ZENDROP_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[Zendrop] Searching: ${params.keywords.join(', ')}`);
+    return []; // API integration placeholder
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
+// ── Spocket Provider ───────────────────────────
+
+export class SpocketProvider implements SourceProvider {
+  type = 'CJ_DROPSHIPPING' as const;
+  name = 'Spocket';
+
+  isAvailable(): boolean { return !!process.env.SPOCKET_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[Spocket] Searching: ${params.keywords.join(', ')}`);
+    return [];
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
+// ── Alibaba Provider ───────────────────────────
+
+export class AlibabaProvider implements SourceProvider {
+  type = 'ALIEXPRESS' as const; // Similar data model
+  name = 'Alibaba';
+
+  isAvailable(): boolean { return !!process.env.ALIBABA_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[Alibaba] Searching: ${params.keywords.join(', ')}`);
+    return [];
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
+// ── Temu Trend Signals ─────────────────────────
+
+export class TemuTrendProvider implements SourceProvider {
+  type = 'MANUAL' as const;
+  name = 'Temu Trends';
+
+  isAvailable(): boolean { return !!process.env.TEMU_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[Temu] Scanning trends: ${params.keywords.join(', ')}`);
+    return [];
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
+// ── TikTok Trend Signals ───────────────────────
+
+export class TikTokTrendProvider implements SourceProvider {
+  type = 'MANUAL' as const;
+  name = 'TikTok Trends';
+
+  isAvailable(): boolean { return !!process.env.TIKTOK_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[TikTok] Scanning viral products: ${params.keywords.join(', ')}`);
+    return [];
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
+// ── Amazon Trend Signals ───────────────────────
+
+export class AmazonTrendProvider implements SourceProvider {
+  type = 'MANUAL' as const;
+  name = 'Amazon Trends';
+
+  isAvailable(): boolean { return !!process.env.AMAZON_API_KEY; }
+  async searchProducts(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
+    console.log(`[Amazon] Scanning bestsellers: ${params.keywords.join(', ')}`);
+    return [];
+  }
+  async getProductDetails(_id: string): Promise<NormalizedProduct | null> { return null; }
+}
+
 // ── Provider Registry ──────────────────────────
 
 export class ProviderRegistry {
   private providers: Map<string, SourceProvider> = new Map();
 
   constructor() {
+    // Product sources
     this.register(new AliExpressProvider());
     this.register(new CJProvider());
+    this.register(new ZendropProvider());
+    this.register(new SpocketProvider());
+    this.register(new AlibabaProvider());
+
+    // Trend signal sources
+    this.register(new TemuTrendProvider());
+    this.register(new TikTokTrendProvider());
+    this.register(new AmazonTrendProvider());
+
+    // Data feeds
     this.register(new CsvFeedProvider());
     this.register(new ManualFeedProvider());
   }

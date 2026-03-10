@@ -682,6 +682,125 @@ router.get('/audit', async (req: Request, res: Response) => {
   }
 });
 
+// ── Suppliers ───────────────────────────────
+
+router.get('/suppliers', async (_req: Request, res: Response) => {
+  const { providerRegistry } = await import('../services/providers/providerRegistry');
+  const all = providerRegistry.getAll();
+  res.json({
+    success: true,
+    data: all.map(p => ({
+      name: p.name,
+      type: p.type,
+      available: p.isAvailable(),
+    })),
+  });
+});
+
+// ── SEO Optimization ────────────────────────
+
+router.post('/seo/optimize/:importedProductId', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { importedProductId } = req.params;
+
+    const imported = await prisma.importedProduct.findUniqueOrThrow({
+      where: { id: importedProductId },
+      include: { candidate: true },
+    });
+
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+
+    const { optimizeProductSeo } = await import('../services/seo/seoOptimizer');
+
+    const result = await optimizeProductSeo(
+      {
+        title: imported.importedTitle,
+        description: imported.importedDescription || imported.candidate?.description || '',
+        category: imported.candidate?.category || '',
+        tags: imported.importedTags,
+        price: imported.importedPrice || undefined,
+      },
+      {
+        storeName: (await prisma.shop.findUnique({ where: { id: shopId } }))?.name || '',
+        niche: settings?.preferredCategories?.[0] || '',
+        audience: settings?.targetAudience || [],
+      }
+    );
+
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    console.error('SEO optimization error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/seo/apply/:importedProductId', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { importedProductId } = req.params;
+    const { title, description, metaTitle, metaDescription, tags, handle } = req.body;
+
+    const imported = await prisma.importedProduct.findUniqueOrThrow({
+      where: { id: importedProductId },
+    });
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+
+    // Update in database
+    await prisma.importedProduct.update({
+      where: { id: importedProductId },
+      data: {
+        importedTitle: title || imported.importedTitle,
+        importedDescription: description || imported.importedDescription,
+        importedTags: tags || imported.importedTags,
+      },
+    });
+
+    // If connected to Shopify, update there too
+    if (shop.accessToken !== 'pending' && imported.shopifyProductGid) {
+      try {
+        const { shopifyGraphQL } = await import('../services/shopify/shopifyClient');
+        await shopifyGraphQL(
+          { shopDomain: shop.shopDomain, accessToken: shop.accessToken },
+          `mutation productUpdate($input: ProductInput!) {
+            productUpdate(input: $input) {
+              product { id }
+              userErrors { field message }
+            }
+          }`,
+          {
+            input: {
+              id: imported.shopifyProductGid,
+              title: title,
+              descriptionHtml: description,
+              seo: { title: metaTitle, description: metaDescription },
+              handle: handle,
+              tags: tags,
+            },
+          }
+        );
+      } catch (shopifyErr) {
+        console.warn('Shopify SEO update failed:', shopifyErr);
+      }
+    }
+
+    // Audit
+    await prisma.auditLog.create({
+      data: {
+        shopId,
+        action: 'SETTINGS_CHANGED',
+        entityType: 'ImportedProduct',
+        entityId: importedProductId,
+        explanation: `SEO optimized: "${title}"`,
+      },
+    });
+
+    res.json({ success: true, message: 'SEO changes applied' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Shop Token Setup ────────────────────────
 
 router.post('/setup-token', async (req: Request, res: Response) => {

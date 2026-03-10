@@ -53,6 +53,17 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         ]}
       />
       <Navigation.Section
+        title="Optimize"
+        items={[
+          {
+            label: 'SEO Optimizer',
+            icon: SearchIcon,
+            onClick: () => navigate('/seo'),
+            selected: location.pathname.startsWith('/seo'),
+          },
+        ]}
+      />
+      <Navigation.Section
         title="System"
         items={[
           {

@@ -18,6 +18,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AuditPage } from './pages/AuditPage';
 import { ResearchPage } from './pages/ResearchPage';
 
+import { SeoPage } from './pages/SeoPage';
+
 export default function App() {
   return (
     <AppProvider i18n={enTranslations}>
@@ -29,6 +31,7 @@ export default function App() {
             <Route path="/research" element={<ResearchPage />} />
             <Route path="/candidates" element={<CandidatesPage />} />
             <Route path="/imports" element={<ImportsPage />} />
+            <Route path="/seo" element={<SeoPage />} />
             <Route path="/replacements" element={<ReplacementsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/audit" element={<AuditPage />} />
