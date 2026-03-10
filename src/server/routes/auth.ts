@@ -108,6 +108,21 @@ router.get('/callback', async (req: Request, res: Response) => {
       },
     });
 
+    // Also update any other shop records with pending tokens
+    // (handles case where frontend created a different record)
+    const shopBase = (shop as string).replace('.myshopify.com', '');
+    await prisma.shop.updateMany({
+      where: {
+        OR: [
+          { accessToken: 'pending' },
+          { shopDomain: { contains: shopBase } },
+        ],
+      },
+      data: { accessToken },
+    });
+
+    console.log(`[Auth] Token saved for ${shop} and all matching shops`);
+
     // Redirect to app
     res.redirect(`https://${shop}/admin/apps/${config.shopify.apiKey}`);
   } catch (err) {

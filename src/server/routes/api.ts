@@ -784,23 +784,65 @@ router.post('/suppliers/toggle', async (req: Request, res: Response) => {
   }
 });
 
-// Debug endpoint to check shop record
+// Debug endpoint to check ALL shop records
 router.get('/debug/shop', async (req: Request, res: Response) => {
   try {
-    const shopId = await getOrCreateShop(req);
-    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
-    res.json({
-      success: true,
-      data: {
-        id: shop.id,
-        domain: shop.shopDomain,
-        name: shop.name,
-        tokenPrefix: shop.accessToken.slice(0, 10) + '...',
-        tokenLength: shop.accessToken.length,
-        isPending: shop.accessToken === 'pending',
-        isActive: shop.isActive,
+    // Show ALL shops in the database
+    const allShops = await prisma.shop.findMany({
+      select: {
+        id: true,
+        shopDomain: true,
+        name: true,
+        accessToken: true,
+        isActive: true,
+        createdAt: true,
       },
     });
+
+    // Also try to identify which shop the frontend is using
+    let frontendDomain = req.headers['x-shop-domain'] as string || 'unknown';
+
+    res.json({
+      success: true,
+      frontendSendsDomain: frontendDomain,
+      allShops: allShops.map(s => ({
+        id: s.id,
+        domain: s.shopDomain,
+        name: s.name,
+        tokenPrefix: s.accessToken.slice(0, 15) + '...',
+        tokenLength: s.accessToken.length,
+        isPending: s.accessToken === 'pending',
+        isActive: s.isActive,
+        created: s.createdAt,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Fix token: update ALL shops matching this domain pattern
+router.post('/fix-token', async (req: Request, res: Response) => {
+  try {
+    const { accessToken } = req.body;
+    if (!accessToken) return res.status(400).json({ error: 'accessToken required' });
+
+    // Update ALL shop records with pending tokens
+    const result = await prisma.shop.updateMany({
+      where: { accessToken: 'pending' },
+      data: { accessToken },
+    });
+
+    // Also update any shop that matches the frontend domain
+    const domain = req.headers['x-shop-domain'] as string;
+    if (domain && domain !== 'unknown') {
+      await prisma.shop.updateMany({
+        where: { shopDomain: { contains: domain.replace('.myshopify.com', '') } },
+        data: { accessToken },
+      });
+    }
+
+    res.json({ success: true, message: `Updated ${result.count} shop records`, updated: result.count });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -918,10 +960,19 @@ router.post('/setup-token', async (req: Request, res: Response) => {
     const { accessToken } = req.body;
     if (!accessToken) return res.status(400).json({ error: 'accessToken required' });
 
+    // Update the specific shop
     await prisma.shop.update({
       where: { id: shopId },
       data: { accessToken },
     });
+
+    // Also update ALL pending shops
+    const fixed = await prisma.shop.updateMany({
+      where: { accessToken: 'pending' },
+      data: { accessToken },
+    });
+
+    console.log(`[Token] Updated shop ${shopId} + ${fixed.count} pending shops`);
 
     res.json({ success: true, message: 'Access token updated. Imports will now create real Shopify products.' });
   } catch (err: any) {
