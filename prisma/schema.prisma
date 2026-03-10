@@ -1,0 +1,504 @@
+// ==============================================
+// FlexHunter - Database Schema
+// ==============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ──────────────────────────────────────
+
+enum ReplacementMode {
+  MANUAL
+  AUTOMATIC
+  HYBRID
+}
+
+enum ProductStatus {
+  CANDIDATE
+  APPROVED
+  IMPORTING
+  TESTING
+  WINNER
+  WEAK
+  REPLACEMENT_SUGGESTED
+  AUTO_REPLACED
+  ARCHIVED
+  PINNED
+  REJECTED
+}
+
+enum JobType {
+  ANALYZE_STORE
+  SYNC_PROVIDER
+  RESEARCH_PRODUCTS
+  SCORE_PRODUCTS
+  IMPORT_PRODUCT
+  SYNC_PERFORMANCE
+  EVALUATE_WEAK
+  SUGGEST_REPLACEMENTS
+  EXECUTE_REPLACEMENT
+  DOMAIN_ANALYSIS
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ProviderType {
+  ALIEXPRESS
+  CJ_DROPSHIPPING
+  CSV_FEED
+  MANUAL
+}
+
+enum ReplacementAction {
+  SUGGESTED
+  APPROVED
+  EXECUTED
+  REJECTED
+  ROLLED_BACK
+}
+
+enum AuditAction {
+  PRODUCT_RECOMMENDED
+  PRODUCT_IMPORTED
+  PRODUCT_FLAGGED_WEAK
+  REPLACEMENT_SUGGESTED
+  REPLACEMENT_APPROVED
+  REPLACEMENT_EXECUTED
+  REPLACEMENT_REJECTED
+  PRODUCT_PINNED
+  PRODUCT_UNPINNED
+  PRODUCT_ARCHIVED
+  SETTINGS_CHANGED
+  RESEARCH_COMPLETED
+  STORE_ANALYZED
+}
+
+enum ShippingSpeed {
+  EXPRESS
+  STANDARD
+  ECONOMY
+  UNKNOWN
+}
+
+// ── Core Models ────────────────────────────────
+
+model Shop {
+  id            String   @id @default(uuid())
+  shopDomain    String   @unique
+  accessToken   String
+  shopifyGid    String?
+  name          String?
+  email         String?
+  plan          String?
+  currency      String   @default("USD")
+  timezone      String?
+  installedAt   DateTime @default(now())
+  uninstalledAt DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  settings        MerchantSettings?
+  storeProfile    StoreProfile?
+  domainAnalysis  DomainAnalysis?
+  candidates      CandidateProduct[]
+  imports         ImportedProduct[]
+  replacements    ReplacementDecision[]
+  automationRules AutomationRule[]
+  jobRuns         JobRun[]
+  auditLogs       AuditLog[]
+  watchlists      ProductWatchlist[]
+  providerSyncs   ProviderSyncRun[]
+}
+
+model MerchantSettings {
+  id                    String          @id @default(uuid())
+  shopId                String          @unique
+  shop                  Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Onboarding
+  storeDescription      String?         @db.Text
+  targetAudience        String[]
+  targetCountries       String[]
+  preferredCategories   String[]
+  bannedCategories      String[]
+  priceRangeMin         Float?
+  priceRangeMax         Float?
+  minimumMarginPercent  Float           @default(30)
+  desiredShippingSpeed  ShippingSpeed   @default(STANDARD)
+
+  // Replacement
+  replacementMode       ReplacementMode @default(MANUAL)
+  minTestDays           Int             @default(7)
+  minTestViews          Int             @default(50)
+  autoArchiveOld        Boolean         @default(true)
+  notifyBeforeReplace   Boolean         @default(true)
+  neverReplacePinned    Boolean         @default(true)
+  confidenceThreshold   Float           @default(0.7)
+  approvalThreshold     Float           @default(0.85)
+  revenueProtection     Float           @default(100)
+  approveFirstReplace   Boolean         @default(true)
+
+  // Research
+  researchFrequencyDays Int             @default(3)
+  maxCandidatesPerRun   Int             @default(50)
+  autoResearchEnabled   Boolean         @default(false)
+
+  onboardingComplete    Boolean         @default(false)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+model StoreProfile {
+  id               String   @id @default(uuid())
+  shopId           String   @unique
+  shop             Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Extracted DNA
+  nicheKeywords    String[]
+  audienceSegments String[]
+  toneAttributes   String[]
+  pricePositioning String?
+  categoryProfile  Json?
+  catalogGaps      String[]
+  catalogStrengths String[]
+  brandVibe        String?
+  competitorHints  String[]
+
+  // Catalog snapshot
+  productCount     Int      @default(0)
+  collectionCount  Int      @default(0)
+  avgPrice         Float?
+  priceRange       Json?
+  topCategories    String[]
+  catalogSnapshot  Json?
+
+  analyzedAt       DateTime @default(now())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model DomainAnalysis {
+  id                  String   @id @default(uuid())
+  shopId              String   @unique
+  shop                Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  domain              String
+  extractedWords      String[]
+  detectedSlang       String[]
+  inferredTone        String[]
+  inferredAgeGroup    String?
+  psychographicHints  String[]
+  categoryBias        String[]
+  vibeScore           Json?
+  domainFitKeywords   String[]
+  semanticAnalysis    Json?
+
+  analyzedAt          DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+// ── Product Pipeline ───────────────────────────
+
+model CandidateProduct {
+  id                String        @id @default(uuid())
+  shopId            String
+  shop              Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  // Source info
+  providerType      ProviderType
+  providerProductId String?
+  sourceUrl         String?
+  sourceName        String?
+
+  // Product data
+  title             String
+  description       String?       @db.Text
+  category          String?
+  subcategory       String?
+  imageUrls         String[]
+  variants          Json?
+  costPrice         Float?
+  suggestedPrice    Float?
+  currency          String        @default("USD")
+  shippingCost      Float?
+  shippingDays      Int?
+  shippingSpeed     ShippingSpeed @default(UNKNOWN)
+  warehouseCountry  String?
+
+  // Supplier metrics
+  reviewCount       Int?
+  reviewRating      Float?
+  orderVolume       Int?
+  supplierRating    Float?
+
+  // Status
+  status            ProductStatus @default(CANDIDATE)
+  score             CandidateScore?
+
+  // Metadata
+  rawData           Json?
+  researchBatchId   String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  importedProduct   ImportedProduct?
+  watchlistEntries  ProductWatchlist[]
+
+  @@index([shopId, status])
+  @@index([shopId, researchBatchId])
+}
+
+model CandidateScore {
+  id                String           @id @default(uuid())
+  candidateId       String           @unique
+  candidate         CandidateProduct @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  // Individual scores (0-100)
+  domainFit         Float            @default(0)
+  storeFit          Float            @default(0)
+  audienceFit       Float            @default(0)
+  trendFit          Float            @default(0)
+  visualVirality    Float            @default(0)
+  novelty           Float            @default(0)
+  priceFit          Float            @default(0)
+  marginFit         Float            @default(0)
+  shippingFit       Float            @default(0)
+  saturationInverse Float            @default(0)
+  refundRiskInverse Float            @default(0)
+
+  // Composite
+  finalScore        Float            @default(0)
+  confidence        Float            @default(0)
+
+  // Explanation
+  explanation       String?          @db.Text
+  fitReasons        String[]
+  concerns          String[]
+  scoringVersion    String           @default("v1")
+
+  scoredAt          DateTime         @default(now())
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+}
+
+model ImportedProduct {
+  id                  String           @id @default(uuid())
+  shopId              String
+  candidateId         String           @unique
+  candidate           CandidateProduct @relation(fields: [candidateId], references: [id])
+
+  // Shopify references
+  shopifyProductId    String?
+  shopifyProductGid   String?
+  shopifyHandle       String?
+  shopifyStatus       String?
+
+  // Import config
+  importedTitle       String
+  importedDescription String?          @db.Text
+  importedTags        String[]
+  importedPrice       Float?
+  importedCompareAt   Float?
+  publishedOnImport   Boolean          @default(false)
+
+  // Tracking
+  importedAt          DateTime         @default(now())
+  testStartedAt       DateTime?
+  testWindowDays      Int              @default(7)
+  status              ProductStatus    @default(TESTING)
+  isPinned            Boolean          @default(false)
+
+  // Performance
+  performance         ProductPerformance?
+  replacements        ReplacementDecision[]
+  pins                ProductPin[]
+
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  shop                Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId, status])
+  @@index([shopifyProductId])
+}
+
+model ProductPerformance {
+  id                String         @id @default(uuid())
+  importedProductId String         @unique
+  importedProduct   ImportedProduct @relation(fields: [importedProductId], references: [id], onDelete: Cascade)
+
+  // Metrics
+  views             Int            @default(0)
+  addToCarts        Int            @default(0)
+  checkoutsStarted  Int            @default(0)
+  conversions       Int            @default(0)
+  revenue           Float          @default(0)
+  costOfGoods       Float          @default(0)
+  margin            Float          @default(0)
+  refunds           Int            @default(0)
+  refundAmount      Float          @default(0)
+
+  // Calculated
+  conversionRate    Float          @default(0)
+  revenuePerView    Float          @default(0)
+  marginPercent     Float          @default(0)
+  healthScore       Float          @default(0)
+
+  // Timeline
+  daysSinceLaunch   Int            @default(0)
+  lastSyncedAt      DateTime?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+}
+
+// ── Replacement System ─────────────────────────
+
+model ReplacementDecision {
+  id                    String            @id @default(uuid())
+  shopId                String
+  shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  currentProductId      String
+  currentProduct        ImportedProduct   @relation(fields: [currentProductId], references: [id])
+  replacementCandidateId String?
+
+  // Decision
+  action                ReplacementAction @default(SUGGESTED)
+  confidence            Float             @default(0)
+  reason                String?           @db.Text
+  fitExplanation        String?           @db.Text
+
+  // Current product metrics at decision time
+  currentMetrics        Json?
+  replacementMetrics    Json?
+
+  // Approval
+  approvedBy            String?
+  approvedAt            DateTime?
+  executedAt            DateTime?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  @@index([shopId, action])
+}
+
+model AutomationRule {
+  id             String          @id @default(uuid())
+  shopId         String
+  shop           Shop            @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  ruleName       String
+  ruleType       String
+  condition      Json
+  action         Json
+  isActive       Boolean         @default(true)
+  priority       Int             @default(0)
+
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([shopId, isActive])
+}
+
+model ProductPin {
+  id                String         @id @default(uuid())
+  importedProductId String
+  importedProduct   ImportedProduct @relation(fields: [importedProductId], references: [id], onDelete: Cascade)
+
+  reason            String?
+  pinnedAt          DateTime       @default(now())
+  unpinnedAt        DateTime?
+  isActive          Boolean        @default(true)
+
+  @@index([importedProductId, isActive])
+}
+
+model ProductWatchlist {
+  id           String           @id @default(uuid())
+  shopId       String
+  shop         Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  candidateId  String
+  candidate    CandidateProduct @relation(fields: [candidateId], references: [id])
+
+  notes        String?
+  priority     Int              @default(0)
+  addedAt      DateTime         @default(now())
+
+  @@unique([shopId, candidateId])
+}
+
+// ── Jobs & Audit ───────────────────────────────
+
+model JobRun {
+  id          String    @id @default(uuid())
+  shopId      String
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  jobType     JobType
+  status      JobStatus @default(QUEUED)
+  payload     Json?
+  result      Json?
+  error       String?   @db.Text
+  progress    Float     @default(0)
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([shopId, jobType, status])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid())
+  shopId      String
+  shop        Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  action      AuditAction
+  entityType  String?
+  entityId    String?
+  details     Json?
+  explanation String?     @db.Text
+
+  createdAt   DateTime    @default(now())
+
+  @@index([shopId, action])
+  @@index([shopId, createdAt])
+}
+
+model ProviderSyncRun {
+  id           String       @id @default(uuid())
+  shopId       String
+  shop         Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  providerType ProviderType
+  status       JobStatus    @default(QUEUED)
+  itemsFetched Int          @default(0)
+  itemsSaved   Int          @default(0)
+  error        String?      @db.Text
+
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([shopId, providerType])
+}

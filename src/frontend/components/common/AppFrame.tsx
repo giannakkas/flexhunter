@@ -1,0 +1,81 @@
+import React from 'react';
+import { Frame, Navigation } from '@shopify/polaris';
+import { useNavigate, useLocation } from 'react-router-dom';
+import {
+  HomeIcon,
+  SearchIcon,
+  ProductIcon,
+  ImportIcon,
+  RefreshIcon,
+  SettingsIcon,
+  ListBulletedIcon,
+} from '@shopify/polaris-icons';
+
+export function AppFrame({ children }: { children: React.ReactNode }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const navigationMarkup = (
+    <Navigation location={location.pathname}>
+      <Navigation.Section
+        title="FlexHunter"
+        items={[
+          {
+            label: 'Dashboard',
+            icon: HomeIcon,
+            onClick: () => navigate('/'),
+            selected: location.pathname === '/',
+          },
+          {
+            label: 'Research',
+            icon: SearchIcon,
+            onClick: () => navigate('/research'),
+            selected: location.pathname === '/research',
+          },
+          {
+            label: 'Candidates',
+            icon: ProductIcon,
+            onClick: () => navigate('/candidates'),
+            selected: location.pathname === '/candidates',
+            badge: undefined,
+          },
+          {
+            label: 'Imported',
+            icon: ImportIcon,
+            onClick: () => navigate('/imports'),
+            selected: location.pathname === '/imports',
+          },
+          {
+            label: 'Replacements',
+            icon: RefreshIcon,
+            onClick: () => navigate('/replacements'),
+            selected: location.pathname === '/replacements',
+          },
+        ]}
+      />
+      <Navigation.Section
+        title="System"
+        items={[
+          {
+            label: 'Settings',
+            icon: SettingsIcon,
+            onClick: () => navigate('/settings'),
+            selected: location.pathname === '/settings',
+          },
+          {
+            label: 'Audit Log',
+            icon: ListBulletedIcon,
+            onClick: () => navigate('/audit'),
+            selected: location.pathname === '/audit',
+          },
+        ]}
+      />
+    </Navigation>
+  );
+
+  return (
+    <Frame navigation={navigationMarkup}>
+      {children}
+    </Frame>
+  );
+}
