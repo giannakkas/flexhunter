@@ -65,11 +65,11 @@ export function DashboardPage() {
               }}>
                 <BlockStack gap="300">
                   <Text as="h1" variant="headingXl">
-                    Welcome to FlexHunter 🎯
+                    Welcome to FlexHunter
                   </Text>
                   <Text as="p" variant="bodyLg">
-                    Your AI-powered product hunter. We'll find the perfect products for your store,
-                    import them, track performance, and automatically replace underperformers.
+                    Your AI-powered product hunter. Describe your store, sit back, and watch the magic happen.
+                    We'll find the perfect products, import them, track performance, and replace underperformers automatically.
                   </Text>
                   <div style={{ paddingTop: 8 }}>
                     <Button variant="primary" size="large" onClick={() => navigate('/onboarding')}>

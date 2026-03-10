@@ -2,10 +2,13 @@ import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Select, TextField,
   Checkbox, Button, Banner, Divider, RangeSlider, ChoiceList,
+  EmptyState,
 } from '@shopify/polaris';
+import { useNavigate } from 'react-router-dom';
 import { useApi } from '../hooks/useApi';
 
 export function SettingsPage() {
+  const navigate = useNavigate();
   const { data: settings, get, loading } = useApi<any>();
   const { put, loading: saving, error } = useApi();
   const [form, setForm] = useState<any>(null);
@@ -15,7 +18,7 @@ export function SettingsPage() {
   useEffect(() => { if (settings) setForm({ ...settings }); }, [settings]);
 
   const updateForm = (key: string, value: any) => {
-    setForm((prev: any) => ({ ...prev, [key]: value }));
+    setForm((prev: any) => prev ? { ...prev, [key]: value } : prev);
     setSaved(false);
   };
 
@@ -26,8 +29,25 @@ export function SettingsPage() {
     setSaved(true);
   };
 
-  if (loading || !form) {
-    return <Page title="Settings"><Card><Text as="p">Loading...</Text></Card></Page>;
+  if (loading) {
+    return <Page title="Settings"><Card><Text as="p">Loading settings...</Text></Card></Page>;
+  }
+
+  // No settings yet = not onboarded
+  if (!form) {
+    return (
+      <Page title="Settings">
+        <Card>
+          <EmptyState
+            heading="Complete setup first"
+            image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
+            action={{ content: 'Go to Setup', onAction: () => navigate('/onboarding') }}
+          >
+            <Text as="p">Complete the onboarding wizard to configure your settings.</Text>
+          </EmptyState>
+        </Card>
+      </Page>
+    );
   }
 
   return (
@@ -46,9 +66,9 @@ export function SettingsPage() {
             <ChoiceList
               title="How should replacements be handled?"
               choices={[
-                { label: 'Manual – I approve every replacement', value: 'MANUAL' },
-                { label: 'Automatic – Auto-replace when thresholds are met', value: 'AUTOMATIC' },
-                { label: 'Hybrid – Auto for high confidence, manual for the rest', value: 'HYBRID' },
+                { label: 'Manual \u2013 I approve every replacement', value: 'MANUAL' },
+                { label: 'Automatic \u2013 Auto-replace when thresholds are met', value: 'AUTOMATIC' },
+                { label: 'Hybrid \u2013 Auto for high confidence, manual for the rest', value: 'HYBRID' },
               ]}
               selected={[form.replacementMode]}
               onChange={(v) => updateForm('replacementMode', v[0])}
@@ -56,7 +76,7 @@ export function SettingsPage() {
           </BlockStack>
         </Card>
 
-        {/* Test & Evaluation Rules */}
+        {/* Test Rules */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Test & Evaluation Rules</Text>
@@ -65,33 +85,24 @@ export function SettingsPage() {
               label={`Minimum test days: ${form.minTestDays}`}
               value={form.minTestDays}
               onChange={(v) => updateForm('minTestDays', v)}
-              min={3}
-              max={30}
-              output
+              min={3} max={30} output
             />
-
             <RangeSlider
               label={`Minimum test views: ${form.minTestViews}`}
               value={form.minTestViews}
               onChange={(v) => updateForm('minTestViews', v)}
-              min={10}
-              max={500}
-              step={10}
-              output
+              min={10} max={500} step={10} output
             />
-
             <RangeSlider
               label={`Minimum margin: ${form.minimumMarginPercent}%`}
               value={form.minimumMarginPercent}
               onChange={(v) => updateForm('minimumMarginPercent', v)}
-              min={10}
-              max={80}
-              output
+              min={10} max={80} output
             />
           </BlockStack>
         </Card>
 
-        {/* Safety Thresholds */}
+        {/* Safety */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Safety & Confidence</Text>
@@ -100,9 +111,7 @@ export function SettingsPage() {
               label={`Confidence threshold: ${(form.confidenceThreshold * 100).toFixed(0)}%`}
               value={form.confidenceThreshold * 100}
               onChange={(v) => updateForm('confidenceThreshold', (v as number) / 100)}
-              min={30}
-              max={95}
-              output
+              min={30} max={95} output
             />
 
             {form.replacementMode === 'HYBRID' && (
@@ -110,9 +119,7 @@ export function SettingsPage() {
                 label={`Auto-approve threshold: ${(form.approvalThreshold * 100).toFixed(0)}%`}
                 value={form.approvalThreshold * 100}
                 onChange={(v) => updateForm('approvalThreshold', (v as number) / 100)}
-                min={50}
-                max={99}
-                output
+                min={50} max={99} output
               />
             )}
 
@@ -121,66 +128,41 @@ export function SettingsPage() {
               type="number"
               value={String(form.revenueProtection)}
               onChange={(v) => updateForm('revenueProtection', parseFloat(v))}
-              helpText="Products earning above this amount require approval before replacement"
+              helpText="Products earning above this require approval"
               autoComplete="off"
             />
 
             <Divider />
 
-            <Checkbox
-              label="Auto-archive replaced products"
-              checked={form.autoArchiveOld}
-              onChange={(v) => updateForm('autoArchiveOld', v)}
-            />
-            <Checkbox
-              label="Notify me before auto-replacements"
-              checked={form.notifyBeforeReplace}
-              onChange={(v) => updateForm('notifyBeforeReplace', v)}
-            />
-            <Checkbox
-              label="Never auto-replace pinned products"
-              checked={form.neverReplacePinned}
-              onChange={(v) => updateForm('neverReplacePinned', v)}
-            />
-            <Checkbox
-              label="Require approval for the first replacement"
-              checked={form.approveFirstReplace}
-              onChange={(v) => updateForm('approveFirstReplace', v)}
-            />
+            <Checkbox label="Auto-archive replaced products" checked={form.autoArchiveOld} onChange={(v) => updateForm('autoArchiveOld', v)} />
+            <Checkbox label="Notify me before auto-replacements" checked={form.notifyBeforeReplace} onChange={(v) => updateForm('notifyBeforeReplace', v)} />
+            <Checkbox label="Never auto-replace pinned products" checked={form.neverReplacePinned} onChange={(v) => updateForm('neverReplacePinned', v)} />
+            <Checkbox label="Require approval for first replacement" checked={form.approveFirstReplace} onChange={(v) => updateForm('approveFirstReplace', v)} />
           </BlockStack>
         </Card>
 
-        {/* Research Settings */}
+        {/* Research */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Research Settings</Text>
 
-            <Checkbox
-              label="Enable automatic research"
-              checked={form.autoResearchEnabled}
-              onChange={(v) => updateForm('autoResearchEnabled', v)}
-            />
-
+            <Checkbox label="Enable automatic research" checked={form.autoResearchEnabled} onChange={(v) => updateForm('autoResearchEnabled', v)} />
             <RangeSlider
               label={`Research frequency: every ${form.researchFrequencyDays} days`}
               value={form.researchFrequencyDays}
               onChange={(v) => updateForm('researchFrequencyDays', v)}
-              min={1}
-              max={14}
-              output
+              min={1} max={14} output
             />
-
             <RangeSlider
               label={`Max candidates per run: ${form.maxCandidatesPerRun}`}
               value={form.maxCandidatesPerRun}
               onChange={(v) => updateForm('maxCandidatesPerRun', v)}
-              min={10}
-              max={100}
-              step={5}
-              output
+              min={10} max={100} step={5} output
             />
           </BlockStack>
         </Card>
+
+        <div style={{ paddingBottom: 40 }} />
       </BlockStack>
     </Page>
   );

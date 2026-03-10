@@ -1,19 +1,53 @@
-// ==============================================
-// API Hooks
-// ==============================================
-
 import { useState, useCallback } from 'react';
 
 const API_BASE = '/api';
 
+/**
+ * Extract shop domain from URL. In Shopify embedded apps,
+ * the URL contains the shop domain.
+ */
+function getShopDomain(): string {
+  // Try URL params (Shopify embeds pass shop in URL)
+  const params = new URLSearchParams(window.location.search);
+  const shop = params.get('shop');
+  if (shop) {
+    sessionStorage.setItem('shopDomain', shop);
+    return shop;
+  }
+
+  // Try to extract from the page URL path (admin.shopify.com/store/xxx)
+  const match = window.location.hostname.match(/admin\.shopify\.com/)
+    ? window.location.pathname.match(/\/store\/([^\/]+)/)
+    : null;
+  if (match) {
+    const domain = `${match[1]}.myshopify.com`;
+    sessionStorage.setItem('shopDomain', domain);
+    return domain;
+  }
+
+  // Try parent URL for iframe context
+  try {
+    const parentUrl = document.referrer || window.top?.location.href || '';
+    const parentMatch = parentUrl.match(/\/store\/([^\/]+)/);
+    if (parentMatch) {
+      const domain = `${parentMatch[1]}.myshopify.com`;
+      sessionStorage.setItem('shopDomain', domain);
+      return domain;
+    }
+  } catch {}
+
+  // Fallback
+  return sessionStorage.getItem('shopDomain') || 'unknown';
+}
+
 async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
-  const shopId = sessionStorage.getItem('shopId') || 'dev-shop-id';
+  const shopDomain = getShopDomain();
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      'x-shop-id': shopId,
+      'x-shop-domain': shopDomain,
       ...options?.headers,
     },
   });
