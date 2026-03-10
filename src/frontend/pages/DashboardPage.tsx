@@ -214,16 +214,17 @@ export function DashboardPage() {
   const handleResearch = async () => {
     setShowResearchProgress(true);
     const result = await startResearch('/research/start');
-    // If research ran synchronously, it returns data directly
     if (result?.data) {
       setShowResearchProgress(false);
       get('/dashboard');
+      navigate('/candidates');
     }
   };
 
   const handleResearchComplete = () => {
     setShowResearchProgress(false);
     get('/dashboard');
+    navigate('/candidates');
   };
 
   const handleSync = async () => {
@@ -246,11 +247,11 @@ export function DashboardPage() {
               borderRadius: 12, padding: '36px 32px', color: 'white',
             }}>
               <BlockStack gap="300">
-                <div style={{ fontSize: 14, letterSpacing: 2, textTransform: 'uppercase', color: '#58A6FF', fontWeight: 600 }}>
-                  PRODUCT INTELLIGENCE
-                </div>
-                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2 }}>
+                <div style={{ fontSize: 28, fontWeight: 700, lineHeight: 1.2, color: 'white' }}>
                   Welcome to FlexHunter
+                </div>
+                <div style={{ fontSize: 12, letterSpacing: 2, textTransform: 'uppercase', color: '#58A6FF', fontWeight: 600 }}>
+                  PRODUCT DISCOVERY INTELLIGENCE
                 </div>
                 <div style={{ fontSize: 15, color: '#8B949E', lineHeight: 1.5, maxWidth: 600 }}>
                   Describe your store, sit back, and watch the magic happen. Our AI finds
@@ -321,7 +322,7 @@ export function DashboardPage() {
               <img
                 src="/logo.png"
                 alt="FlexHunter"
-                style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover' }}
+                style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain' }}
               />
               <div>
                 <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>FlexHunter</div>

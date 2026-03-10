@@ -297,98 +297,87 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
     const shopId = await getOrCreateShop(req);
     const { id } = req.params;
 
+    const candidate = await prisma.candidateProduct.findUniqueOrThrow({
+      where: { id },
+      include: { score: true, importedProduct: true },
+    });
+
+    // Already imported? Skip
+    if (candidate.importedProduct) {
+      return res.json({ success: true, message: 'Already imported' });
+    }
+
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+    const cost = candidate.costPrice || 0;
+    const price = candidate.suggestedPrice || cost * 2.5;
+    const scoreVal = Math.round(candidate.score?.finalScore || 0);
+
+    let shopifyProductId = `mock-${Date.now()}`;
+    let shopifyGid = `gid://shopify/Product/${shopifyProductId}`;
+    let shopifyHandle = candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+    let isMock = true;
+
+    // Try real Shopify import
+    if (shop.accessToken && shop.accessToken !== 'pending') {
+      try {
+        const { createShopifyProduct } = await import('../services/shopify/shopifyClient');
+        const result = await createShopifyProduct(
+          shop.shopDomain, shop.accessToken,
+          {
+            title: candidate.title,
+            descriptionHtml: candidate.description || '',
+            productType: candidate.category || '',
+            tags: ['flexhunter', 'testing', `score:${scoreVal}`],
+            status: 'DRAFT',
+            variants: [{ price: price.toFixed(2) }],
+          }
+        );
+        shopifyProductId = result.id.split('/').pop() || shopifyProductId;
+        shopifyGid = result.id;
+        shopifyHandle = result.handle;
+        isMock = false;
+      } catch (shopifyErr: any) {
+        console.warn('Shopify import failed, using mock:', shopifyErr.message);
+      }
+    }
+
+    // Create ImportedProduct
+    await prisma.importedProduct.create({
+      data: {
+        shopId,
+        candidateId: id,
+        shopifyProductId,
+        shopifyProductGid: shopifyGid,
+        shopifyHandle,
+        shopifyStatus: isMock ? 'MOCK' : 'DRAFT',
+        importedTitle: candidate.title,
+        importedDescription: candidate.description,
+        importedTags: ['flexhunter', 'testing'],
+        importedPrice: price,
+        publishedOnImport: false,
+        status: 'TESTING',
+        testStartedAt: new Date(),
+      },
+    });
+
     // Update candidate status
     await prisma.candidateProduct.update({
       where: { id },
       data: { status: 'APPROVED' },
     });
 
-    // Try queue, fall back to direct import
-    try {
-      await enqueueImport(shopId, id);
-    } catch (queueErr) {
-      console.warn('Queue unavailable, importing directly');
+    // Audit
+    await prisma.auditLog.create({
+      data: {
+        shopId,
+        action: 'PRODUCT_IMPORTED',
+        entityType: 'CandidateProduct',
+        entityId: id,
+        explanation: `Imported "${candidate.title}" (${isMock ? 'mock' : 'Shopify'})`,
+      },
+    });
 
-      const candidate = await prisma.candidateProduct.findUniqueOrThrow({
-        where: { id },
-        include: { score: true },
-      });
-
-      const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
-      const cost = candidate.costPrice || 0;
-      const price = candidate.suggestedPrice || cost * 2.5;
-      const scoreVal = Math.round(candidate.score?.finalScore || 0);
-
-      let shopifyProductId = `mock-${Date.now()}`;
-      let shopifyGid = `gid://shopify/Product/${shopifyProductId}`;
-      let shopifyHandle = candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
-
-      // Try real Shopify import if we have a real token
-      if (shop.accessToken && shop.accessToken !== 'pending') {
-        try {
-          const { createShopifyProduct, addProductImages, tagShopifyProduct } = await import('../services/shopify/shopifyClient');
-          const result = await createShopifyProduct(
-            shop.shopDomain, shop.accessToken,
-            {
-              title: candidate.title,
-              descriptionHtml: candidate.description || '',
-              productType: candidate.category || '',
-              tags: ['flexhunter', 'testing', `score:${scoreVal}`],
-              status: 'DRAFT',
-              variants: [{ price: price.toFixed(2) }],
-            }
-          );
-          shopifyProductId = result.id.split('/').pop() || shopifyProductId;
-          shopifyGid = result.id;
-          shopifyHandle = result.handle;
-
-          if (candidate.imageUrls.length > 0) {
-            await addProductImages(shop.shopDomain, shop.accessToken, result.id, candidate.imageUrls);
-          }
-        } catch (shopifyErr) {
-          console.warn('Shopify import failed, saving as mock import:', shopifyErr);
-        }
-      }
-
-      // Create ImportedProduct record
-      await prisma.importedProduct.create({
-        data: {
-          shopId,
-          candidateId: id,
-          shopifyProductId,
-          shopifyProductGid: shopifyGid,
-          shopifyHandle,
-          shopifyStatus: shop.accessToken === 'pending' ? 'MOCK' : 'DRAFT',
-          importedTitle: candidate.title,
-          importedDescription: candidate.description,
-          importedTags: ['flexhunter', 'testing'],
-          importedPrice: price,
-          publishedOnImport: false,
-          status: 'TESTING',
-          testStartedAt: new Date(),
-        },
-      });
-
-      // Update candidate
-      await prisma.candidateProduct.update({
-        where: { id },
-        data: { status: 'IMPORTING' },
-      });
-
-      // Audit
-      await prisma.auditLog.create({
-        data: {
-          shopId,
-          action: 'PRODUCT_IMPORTED',
-          entityType: 'CandidateProduct',
-          entityId: id,
-          explanation: `Imported "${candidate.title}" (${shop.accessToken === 'pending' ? 'mock mode' : 'to Shopify'})`,
-          details: { shopifyProductId, price } as any,
-        },
-      });
-    }
-
-    res.json({ success: true, message: 'Product approved and import started' });
+    res.json({ success: true, message: isMock ? 'Product saved (mock import)' : 'Product imported to Shopify' });
   } catch (err: any) {
     console.error('Import error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -403,6 +392,40 @@ router.post('/candidates/:id/reject', async (req: Request, res: Response) => {
       data: { status: 'REJECTED' },
     });
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.delete('/candidates/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    // Delete score first (FK constraint)
+    await prisma.candidateScore.deleteMany({ where: { candidateId: id } });
+    await prisma.productWatchlist.deleteMany({ where: { candidateId: id } });
+    await prisma.candidateProduct.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/candidates/reset', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    // Delete all candidates and their scores
+    const candidates = await prisma.candidateProduct.findMany({
+      where: { shopId, importedProduct: null },
+      select: { id: true },
+    });
+    for (const c of candidates) {
+      await prisma.candidateScore.deleteMany({ where: { candidateId: c.id } });
+      await prisma.productWatchlist.deleteMany({ where: { candidateId: c.id } });
+    }
+    await prisma.candidateProduct.deleteMany({
+      where: { shopId, importedProduct: null },
+    });
+    res.json({ success: true, message: `Cleared ${candidates.length} candidates` });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
