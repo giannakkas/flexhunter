@@ -83,6 +83,8 @@ export function AuditPage() {
           </IndexTable>
         </Card>
       )}
+        <div style={{ height: 60 }} />
+      </BlockStack>
     </Page>
   );
 }

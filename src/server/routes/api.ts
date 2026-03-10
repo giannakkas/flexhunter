@@ -682,6 +682,29 @@ router.get('/audit', async (req: Request, res: Response) => {
   }
 });
 
+// ── Provider Request ────────────────────────
+
+router.post('/provider-request', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { provider, details } = req.body;
+
+    await prisma.auditLog.create({
+      data: {
+        shopId,
+        action: 'SETTINGS_CHANGED',
+        entityType: 'ProviderRequest',
+        explanation: `Requested provider: ${provider}`,
+        details: { provider, details } as any,
+      },
+    });
+
+    res.json({ success: true, message: 'Request submitted' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Jobs ───────────────────────────────────────
 
 router.get('/jobs', async (req: Request, res: Response) => {

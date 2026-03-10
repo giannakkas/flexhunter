@@ -113,6 +113,8 @@ export function ReplacementsPage() {
           </Card>
         )}
       </BlockStack>
+        <div style={{ height: 60 }} />
+      </BlockStack>
     </Page>
   );
 }

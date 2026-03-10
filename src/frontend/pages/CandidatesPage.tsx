@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
-  Thumbnail, EmptyState, Modal, Divider,
-  InlineGrid, Tabs, Spinner, Banner, TextField,
+  EmptyState, Modal, Divider, Tabs, Spinner, Banner, TextField,
+  IndexTable, Tooltip, ProgressBar,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { useApi, apiFetch } from '../hooks/useApi';
@@ -14,11 +14,8 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
         <Text as="span" variant="bodySm">{label}</Text>
         <Text as="span" variant="bodySm" fontWeight="semibold">{Math.round(value)}</Text>
       </InlineStack>
-      <div style={{ height: 6, borderRadius: 3, background: '#E4E5E7', overflow: 'hidden' }}>
-        <div style={{
-          height: '100%', borderRadius: 3, background: color,
-          width: `${Math.min(100, value)}%`, transition: 'width 0.3s ease',
-        }} />
+      <div style={{ height: 5, borderRadius: 3, background: '#E4E5E7', overflow: 'hidden' }}>
+        <div style={{ height: '100%', borderRadius: 3, background: color, width: `${Math.min(100, value)}%` }} />
       </div>
     </BlockStack>
   );
@@ -32,13 +29,15 @@ export function CandidatesPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{ open: boolean; title: string; body: string; action: () => void }>({
+    open: false, title: '', body: '', action: () => {},
+  });
 
   const tabs = [
     { id: 'CANDIDATE', content: 'New Candidates' },
-    { id: 'APPROVED', content: 'Approved' },
+    { id: 'APPROVED', content: 'Imported' },
     { id: 'REJECTED', content: 'Skipped' },
   ];
-
   const statusFilter = tabs[selectedTab].id;
 
   useEffect(() => {
@@ -48,10 +47,10 @@ export function CandidatesPage() {
   const handleApprove = async (id: string) => {
     setActionLoading(id);
     try {
-      await apiFetch(`/candidates/${id}/approve`, { method: 'POST' });
-      setMessage('Product imported successfully!');
+      const result = await apiFetch<any>(`/candidates/${id}/approve`, { method: 'POST' });
+      setMessage(result.message || 'Product imported!');
     } catch (err: any) {
-      setMessage(`Import failed: ${err.message}`);
+      setMessage(`Error: ${err.message}`);
     }
     await get(`/candidates?status=${statusFilter}&sort=score`);
     setActionLoading(null);
@@ -66,18 +65,32 @@ export function CandidatesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Delete this candidate permanently?')) return;
-    setActionLoading(id);
-    await apiFetch(`/candidates/${id}`, { method: 'DELETE' });
-    await get(`/candidates?status=${statusFilter}&sort=score`);
-    setActionLoading(null);
+    setConfirmModal({
+      open: true,
+      title: 'Delete Candidate',
+      body: 'Are you sure you want to permanently delete this candidate?',
+      action: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        setActionLoading(id);
+        await apiFetch(`/candidates/${id}`, { method: 'DELETE' });
+        await get(`/candidates?status=${statusFilter}&sort=score`);
+        setActionLoading(null);
+      },
+    });
   };
 
-  const handleResetAll = async () => {
-    if (!window.confirm('Delete ALL non-imported candidates? This cannot be undone.')) return;
-    await apiFetch('/candidates/reset', { method: 'POST' });
-    await get(`/candidates?status=${statusFilter}&sort=score`);
-    setMessage('All candidates cleared');
+  const handleResetAll = () => {
+    setConfirmModal({
+      open: true,
+      title: 'Clear All Candidates',
+      body: 'This will permanently delete ALL non-imported candidates. This cannot be undone.',
+      action: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        await apiFetch('/candidates/reset', { method: 'POST' });
+        await get(`/candidates?status=${statusFilter}&sort=score`);
+        setMessage('All candidates cleared.');
+      },
+    });
   };
 
   const items = (candidates || []).filter((item: any) => {
@@ -86,171 +99,139 @@ export function CandidatesPage() {
     return item.title.toLowerCase().includes(q) || (item.category || '').toLowerCase().includes(q);
   });
 
+  const rowMarkup = items.map((item: any, index: number) => {
+    const score = item.score;
+    const finalScore = score?.finalScore || 0;
+    const scoreColor = finalScore >= 70 ? '#008060' : finalScore >= 50 ? '#B98900' : '#D72C0D';
+    const margin = item.costPrice && item.suggestedPrice
+      ? ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100).toFixed(0) : '-';
+
+    return (
+      <IndexTable.Row id={item.id} key={item.id} position={index}>
+        <IndexTable.Cell>
+          <div style={{
+            width: 36, height: 36, borderRadius: '50%', border: `2.5px solid ${scoreColor}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            fontFamily: "'SF Mono', monospace", fontWeight: 700, fontSize: 13,
+          }}>
+            {finalScore.toFixed(0)}
+          </div>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <BlockStack gap="100">
+            <Button variant="plain" onClick={() => setSelectedCandidate(item)}>
+              <Text as="span" variant="bodyMd" fontWeight="semibold">{item.title}</Text>
+            </Button>
+            <Text as="span" variant="bodySm" tone="subdued">{item.category || 'General'}</Text>
+          </BlockStack>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" fontWeight="semibold">${item.suggestedPrice?.toFixed(2) || '-'}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" tone="subdued">${item.costPrice?.toFixed(2) || '-'}</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span" tone="success" fontWeight="semibold">{margin}%</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <Text as="span">{item.shippingDays || '-'}d</Text>
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          {score?.fitReasons?.[0] && <Badge tone="success">{score.fitReasons[0]}</Badge>}
+        </IndexTable.Cell>
+        <IndexTable.Cell>
+          <InlineStack gap="200">
+            {item.status === 'CANDIDATE' && (
+              <>
+                <Button size="slim" variant="primary" onClick={() => handleApprove(item.id)} loading={actionLoading === item.id}>Import</Button>
+                <Button size="slim" onClick={() => handleReject(item.id)} loading={actionLoading === item.id}>Skip</Button>
+              </>
+            )}
+            {item.status === 'REJECTED' && (
+              <Button size="slim" variant="primary" onClick={() => handleApprove(item.id)} loading={actionLoading === item.id}>Restore</Button>
+            )}
+            <Button size="slim" tone="critical" variant="plain" onClick={() => handleDelete(item.id)}>Delete</Button>
+          </InlineStack>
+        </IndexTable.Cell>
+      </IndexTable.Row>
+    );
+  });
+
   return (
     <Page
       title="Product Candidates"
       subtitle={`${items.length} products`}
-      primaryAction={{
-        content: 'Run New Research',
-        onAction: async () => {
-          await apiFetch('/research/start', { method: 'POST' });
-          await get(`/candidates?status=CANDIDATE&sort=score`);
-          setSelectedTab(0);
-          setMessage('Research complete! New candidates added.');
-        },
-      }}
-      secondaryActions={[
-        { content: 'Clear All', onAction: handleResetAll, destructive: true },
-      ]}
+      primaryAction={{ content: 'Run New Research', onAction: async () => {
+        setMessage('Running research...');
+        await apiFetch('/research/start', { method: 'POST' });
+        await get('/candidates?status=CANDIDATE&sort=score');
+        setSelectedTab(0);
+        setMessage('Research complete!');
+      }}}
+      secondaryActions={[{ content: 'Clear All', onAction: handleResetAll, destructive: true }]}
     >
       <BlockStack gap="400">
-        {message && (
-          <Banner tone="success" onDismiss={() => setMessage(null)}>
-            <Text as="p">{message}</Text>
-          </Banner>
-        )}
+        {message && <Banner tone="success" onDismiss={() => setMessage(null)}><Text as="p">{message}</Text></Banner>}
 
         <Tabs tabs={tabs} selected={selectedTab} onSelect={(i) => { setSelectedTab(i); setSearchQuery(''); }} />
 
-        {/* Search */}
-        <TextField
-          label=""
-          labelHidden
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Search by title or category..."
-          autoComplete="off"
-          clearButton
-          onClearButtonClick={() => setSearchQuery('')}
-        />
+        <TextField label="" labelHidden value={searchQuery} onChange={setSearchQuery}
+          placeholder="Search by title or category..." autoComplete="off"
+          clearButton onClearButtonClick={() => setSearchQuery('')} />
 
         {loading && <Card><div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div></Card>}
 
         {!loading && items.length === 0 && (
           <Card>
-            <EmptyState
-              heading={statusFilter === 'CANDIDATE' ? 'No candidates yet' : `No ${statusFilter.toLowerCase()} products`}
+            <EmptyState heading={statusFilter === 'CANDIDATE' ? 'No candidates' : `No ${tabs[selectedTab].content.toLowerCase()}`}
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              action={statusFilter === 'CANDIDATE' ? {
-                content: 'Run Research',
-                onAction: async () => {
-                  await apiFetch('/research/start', { method: 'POST' });
-                  await get('/candidates?status=CANDIDATE&sort=score');
-                },
-              } : undefined}
+              action={statusFilter === 'CANDIDATE' ? { content: 'Run Research', onAction: async () => {
+                await apiFetch('/research/start', { method: 'POST' });
+                await get('/candidates?status=CANDIDATE&sort=score');
+              }} : undefined}
             >
-              <Text as="p">
-                {statusFilter === 'CANDIDATE'
-                  ? 'Run a research pipeline to discover products.'
-                  : 'Products appear here as you review candidates.'}
-              </Text>
+              <Text as="p">{statusFilter === 'CANDIDATE' ? 'Run research to find products.' : 'Products appear here as you review.'}</Text>
             </EmptyState>
           </Card>
         )}
 
         {!loading && items.length > 0 && (
-          <InlineGrid columns={2} gap="400">
-            {items.map((item: any) => {
-              const score = item.score;
-              const finalScore = score?.finalScore || 0;
-              const scoreColor = finalScore >= 70 ? '#008060' : finalScore >= 50 ? '#B98900' : '#D72C0D';
-
-              return (
-                <Card key={item.id}>
-                  <BlockStack gap="300">
-                    <InlineStack align="space-between" blockAlign="start">
-                      <InlineStack gap="300" blockAlign="start">
-                        <Thumbnail
-                          source={item.imageUrls?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'}
-                          alt={item.title}
-                          size="medium"
-                        />
-                        <BlockStack gap="100">
-                          <Button variant="plain" onClick={() => setSelectedCandidate(item)}>
-                            <Text as="span" variant="headingSm">{item.title}</Text>
-                          </Button>
-                          <InlineStack gap="200">
-                            <Badge tone="info">{item.category || 'General'}</Badge>
-                            <Badge tone={item.status === 'APPROVED' ? 'success' : item.status === 'REJECTED' ? 'critical' : 'attention'}>
-                              {item.status === 'CANDIDATE' ? 'New' : item.status === 'APPROVED' ? 'Imported' : 'Skipped'}
-                            </Badge>
-                          </InlineStack>
-                        </BlockStack>
-                      </InlineStack>
-                      <div style={{
-                        width: 48, height: 48, borderRadius: '50%',
-                        border: `3px solid ${scoreColor}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                        fontFamily: "'SF Mono', monospace", fontWeight: 700, fontSize: 15,
-                      }}>
-                        {finalScore.toFixed(0)}
-                      </div>
-                    </InlineStack>
-
-                    <div style={{
-                      display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8,
-                      background: '#FAFBFC', borderRadius: 8, padding: '10px 12px',
-                    }}>
-                      <div><div style={{ fontSize: 10, color: '#6D7175' }}>Sell</div><div style={{ fontWeight: 600, fontSize: 14 }}>${item.suggestedPrice?.toFixed(2) || '-'}</div></div>
-                      <div><div style={{ fontSize: 10, color: '#6D7175' }}>Cost</div><div style={{ fontWeight: 600, fontSize: 14 }}>${item.costPrice?.toFixed(2) || '-'}</div></div>
-                      <div><div style={{ fontSize: 10, color: '#6D7175' }}>Margin</div><div style={{ fontWeight: 600, fontSize: 14, color: '#008060' }}>
-                        {item.costPrice && item.suggestedPrice ? `${(((item.suggestedPrice - item.costPrice) / item.suggestedPrice) * 100).toFixed(0)}%` : '-'}
-                      </div></div>
-                      <div><div style={{ fontSize: 10, color: '#6D7175' }}>Ships</div><div style={{ fontWeight: 600, fontSize: 14 }}>{item.shippingDays || '-'}d</div></div>
-                    </div>
-
-                    {score?.fitReasons?.length > 0 && (
-                      <InlineStack gap="200" wrap>
-                        {score.fitReasons.slice(0, 3).map((r: string, i: number) => (
-                          <Badge key={i} tone="success">{r}</Badge>
-                        ))}
-                      </InlineStack>
-                    )}
-
-                    <Divider />
-                    <InlineStack gap="200" align="end">
-                      <Button size="slim" tone="critical" variant="plain"
-                        onClick={() => handleDelete(item.id)}
-                        loading={actionLoading === item.id}>
-                        Delete
-                      </Button>
-                      {item.status === 'CANDIDATE' && (
-                        <>
-                          <Button size="slim" onClick={() => handleReject(item.id)}
-                            loading={actionLoading === item.id}>
-                            Skip
-                          </Button>
-                          <Button size="slim" variant="primary"
-                            onClick={() => handleApprove(item.id)}
-                            loading={actionLoading === item.id}>
-                            Import
-                          </Button>
-                        </>
-                      )}
-                      {item.status === 'REJECTED' && (
-                        <Button size="slim" variant="primary"
-                          onClick={() => handleApprove(item.id)}
-                          loading={actionLoading === item.id}>
-                          Restore & Import
-                        </Button>
-                      )}
-                    </InlineStack>
-                  </BlockStack>
-                </Card>
-              );
-            })}
-          </InlineGrid>
+          <Card>
+            <IndexTable
+              resourceName={{ singular: 'product', plural: 'products' }}
+              itemCount={items.length}
+              headings={[
+                { title: 'Score' },
+                { title: 'Product' },
+                { title: 'Price' },
+                { title: 'Cost' },
+                { title: 'Margin' },
+                { title: 'Ships' },
+                { title: 'Fit' },
+                { title: 'Actions' },
+              ]}
+              selectable={false}
+            >
+              {rowMarkup}
+            </IndexTable>
+          </Card>
         )}
+
+        {/* Confirm Modal */}
+        <Modal open={confirmModal.open} onClose={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+          title={confirmModal.title}
+          primaryAction={{ content: 'Confirm', onAction: confirmModal.action, destructive: true }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setConfirmModal(prev => ({ ...prev, open: false })) }]}
+        >
+          <Modal.Section><Text as="p">{confirmModal.body}</Text></Modal.Section>
+        </Modal>
 
         {/* Detail Modal */}
         {selectedCandidate && (
-          <Modal
-            open onClose={() => setSelectedCandidate(null)}
-            title={selectedCandidate.title} size="large"
+          <Modal open onClose={() => setSelectedCandidate(null)} title={selectedCandidate.title} size="large"
             primaryAction={selectedCandidate.status !== 'APPROVED' ? {
-              content: 'Import to Shopify',
-              onAction: () => handleApprove(selectedCandidate.id),
+              content: 'Import to Shopify', onAction: () => handleApprove(selectedCandidate.id),
               loading: actionLoading === selectedCandidate.id,
             } : undefined}
             secondaryActions={[{ content: 'Close', onAction: () => setSelectedCandidate(null) }]}
@@ -259,7 +240,7 @@ export function CandidatesPage() {
               <BlockStack gap="400">
                 <Text as="p">{selectedCandidate.description}</Text>
                 <InlineStack gap="300">
-                  {selectedCandidate.reviewCount && <Badge>Rating: {selectedCandidate.reviewRating} ({selectedCandidate.reviewCount.toLocaleString()} reviews)</Badge>}
+                  {selectedCandidate.reviewCount && <Badge>Rating {selectedCandidate.reviewRating} ({selectedCandidate.reviewCount.toLocaleString()})</Badge>}
                   {selectedCandidate.orderVolume && <Badge>{selectedCandidate.orderVolume.toLocaleString()} orders</Badge>}
                   <Badge>Source: {selectedCandidate.sourceName || selectedCandidate.providerType}</Badge>
                 </InlineStack>
@@ -267,7 +248,7 @@ export function CandidatesPage() {
                   <>
                     <Divider />
                     <Text as="h3" variant="headingMd">Score Breakdown</Text>
-                    <InlineGrid columns={2} gap="300">
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <ScoreBar label="Domain Fit" value={selectedCandidate.score.domainFit} color="#5C6AC4" />
                       <ScoreBar label="Store Fit" value={selectedCandidate.score.storeFit} color="#5C6AC4" />
                       <ScoreBar label="Audience Fit" value={selectedCandidate.score.audienceFit} color="#007ACE" />
@@ -278,7 +259,7 @@ export function CandidatesPage() {
                       <ScoreBar label="Margin Fit" value={selectedCandidate.score.marginFit} color="#008060" />
                       <ScoreBar label="Shipping" value={selectedCandidate.score.shippingFit} color="#B98900" />
                       <ScoreBar label="Low Saturation" value={selectedCandidate.score.saturationInverse} color="#B98900" />
-                    </InlineGrid>
+                    </div>
                     {selectedCandidate.score.explanation && (
                       <div style={{ padding: '12px 16px', borderRadius: 8, background: '#F0F5FF', border: '1px solid #B4D5FE' }}>
                         <Text as="p" variant="bodySm">{selectedCandidate.score.explanation}</Text>
@@ -291,7 +272,7 @@ export function CandidatesPage() {
           </Modal>
         )}
 
-        <div style={{ paddingBottom: 40 }} />
+        <div style={{ height: 60 }} />
       </BlockStack>
     </Page>
   );

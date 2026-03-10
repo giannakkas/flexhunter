@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Button, Banner, Spinner,
-  InlineStack, Badge, Divider, DescriptionList,
+  InlineStack, Badge, Divider, DescriptionList, TextField,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 
@@ -167,7 +167,93 @@ export function ResearchPage() {
             />
           </BlockStack>
         </Card>
+
+        {/* Connected Providers */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Product Sources</Text>
+            <Text as="p" tone="subdued">
+              These are the providers FlexHunter searches for products. More coming soon.
+            </Text>
+            <BlockStack gap="200">
+              {[
+                { name: 'AliExpress', status: 'Mock Data (V1)', tone: 'attention' as const, desc: 'Using sample catalog. Real API integration coming in V2.' },
+                { name: 'CJ Dropshipping', status: 'Coming Soon', tone: 'subdued' as const, desc: 'Will connect via CJ API for faster shipping options.' },
+                { name: 'CSV / Feed Import', status: 'Available', tone: 'success' as const, desc: 'Upload your own product feed for scoring.' },
+              ].map((provider) => (
+                <div key={provider.name} style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  padding: '12px 16px', borderRadius: 8, background: '#FAFBFC', border: '1px solid #E4E5E7',
+                }}>
+                  <BlockStack gap="100">
+                    <Text as="span" variant="bodyMd" fontWeight="semibold">{provider.name}</Text>
+                    <Text as="span" variant="bodySm" tone="subdued">{provider.desc}</Text>
+                  </BlockStack>
+                  <Badge tone={provider.tone}>{provider.status}</Badge>
+                </div>
+              ))}
+            </BlockStack>
+          </BlockStack>
+        </Card>
+
+        {/* Request a Provider */}
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">Request a Provider</Text>
+            <Text as="p" tone="subdued">
+              Want us to integrate a specific supplier or marketplace? Let us know and we'll prioritize it.
+            </Text>
+            <ProviderRequestForm />
+          </BlockStack>
+        </Card>
+
+        <div style={{ height: 60 }} />
       </BlockStack>
     </Page>
+  );
+}
+
+function ProviderRequestForm() {
+  const [provider, setProvider] = useState('');
+  const [details, setDetails] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = () => {
+    // In production, this would POST to your API
+    console.log('Provider request:', { provider, details });
+    setSubmitted(true);
+    setProvider('');
+    setDetails('');
+  };
+
+  if (submitted) {
+    return (
+      <Banner tone="success" onDismiss={() => setSubmitted(false)}>
+        <Text as="p">Thanks! We've received your request and will review it.</Text>
+      </Banner>
+    );
+  }
+
+  return (
+    <BlockStack gap="300">
+      <TextField
+        label="Provider / Marketplace Name"
+        value={provider}
+        onChange={setProvider}
+        placeholder="e.g., Spocket, Zendrop, Temu, Amazon..."
+        autoComplete="off"
+      />
+      <TextField
+        label="Why this provider? (optional)"
+        value={details}
+        onChange={setDetails}
+        placeholder="e.g., Better shipping times to EU, niche products for my category..."
+        multiline={2}
+        autoComplete="off"
+      />
+      <Button variant="primary" onClick={handleSubmit} disabled={!provider.trim()}>
+        Submit Request
+      </Button>
+    </BlockStack>
   );
 }
