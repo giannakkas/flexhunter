@@ -89,30 +89,15 @@ export function ImportsPage() {
         {/* Shopify connection warning */}
         {shopStatus && !shopStatus.hasToken && (
           <Banner tone="critical" title="Products are NOT appearing in your Shopify store"
-            action={{
-              content: 'Connect to Shopify Now',
-              onAction: () => {
-                const url = `https://flexhunter-production.up.railway.app/api/connect-shopify?shop=${shopStatus.domain || ''}`;
-                if (window.top) window.top.location.href = url; else window.location.href = url;
-              },
-            }}>
-            <Text as="p">Click the button to connect FlexHunter with your Shopify store.</Text>
+            action={{ content: 'Setup Connection', onAction: () => navigate('/settings') }}>
+            <Text as="p">Complete a quick 2-minute setup in Settings to connect FlexHunter to your store.</Text>
           </Banner>
         )}
 
         {shopStatus && shopStatus.hasToken && (
-          <Banner tone="warning" title="Need to re-authorize?"
-            action={{
-              content: 'Re-Authorize App',
-              onAction: () => {
-                const url = `https://flexhunter-production.up.railway.app/api/auth?shop=${shopStatus.domain || ''}`;
-                if (window.top) window.top.location.href = url; else window.location.href = url;
-              },
-            }}>
-            <Text as="p">
-              If imports fail with a "scope" error, click Re-Authorize to grant FlexHunter 
-              permission to create products in your store.
-            </Text>
+          <Banner tone="warning" title="Import issues?"
+            action={{ content: 'Update Token in Settings', onAction: () => navigate('/settings') }}>
+            <Text as="p">If imports fail, update your access token in Settings. Make sure write_products scope is enabled.</Text>
           </Banner>
         )}
 

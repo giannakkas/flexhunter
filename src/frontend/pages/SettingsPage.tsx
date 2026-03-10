@@ -202,62 +202,119 @@ function ShopifyTokenSetup() {
   const [token, setToken] = useState('');
   const [status, setStatus] = useState<any>(null);
   const [saved, setSaved] = useState(false);
-  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
     apiFetch<any>('/shop-status').then(r => setStatus(r.data)).catch(() => {});
   }, [saved]);
 
-  const handleConnect = () => {
-    const domain = status?.domain || '';
-    const url = `https://flexhunter-production.up.railway.app/api/connect-shopify?shop=${domain}`;
-    if (window.top) {
-      window.top.location.href = url;
-    } else {
-      window.location.href = url;
-    }
-  };
-
-  const handleSaveManual = async () => {
+  const handleSave = async () => {
     if (!token.trim()) return;
     await apiFetch('/setup-token', { method: 'POST', body: JSON.stringify({ accessToken: token }) });
     setSaved(true);
     setToken('');
   };
 
-  return (
-    <BlockStack gap="300">
-      {status?.hasToken ? (
+  if (status?.hasToken && saved) {
+    return (
+      <Banner tone="success">
+        <Text as="p">Connected to <strong>{status.domain}</strong>. Products will now import directly to your Shopify store.</Text>
+      </Banner>
+    );
+  }
+
+  if (status?.hasToken && !saved) {
+    return (
+      <BlockStack gap="300">
         <Banner tone="success">
           <Text as="p">Connected to <strong>{status.domain}</strong>. Imports create real Shopify products.</Text>
         </Banner>
-      ) : (
-        <BlockStack gap="300">
-          <Banner tone="critical">
-            <Text as="p">Not connected. Products are saved locally only and won't appear in your Shopify store.</Text>
-          </Banner>
-          <Button variant="primary" size="large" onClick={handleConnect} fullWidth>
-            Connect to Shopify Automatically
-          </Button>
-          <Divider />
-          <Button variant="plain" onClick={() => setShowManual(!showManual)}>
-            {showManual ? 'Hide manual setup' : 'Or enter token manually'}
-          </Button>
+        <Button variant="plain" onClick={() => setSaved(false)}>Update token</Button>
+      </BlockStack>
+    );
+  }
+
+  return (
+    <BlockStack gap="400">
+      <Banner tone="critical">
+        <Text as="p">Not connected. Products won't appear in your Shopify store until you complete the setup below.</Text>
+      </Banner>
+
+      <div style={{ padding: '20px', background: '#FAFBFC', borderRadius: 10, border: '1px solid #E4E5E7' }}>
+        <BlockStack gap="400">
+          <Text as="h3" variant="headingSm">Quick Setup (2 minutes)</Text>
+
+          <BlockStack gap="200">
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#5C6AC4', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>1</div>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Open your store's app settings</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Go to: <strong>Shopify Admin → Settings → Apps and sales channels → Develop apps</strong>
+                </Text>
+                <Button size="slim" url={`https://admin.shopify.com/store/${(status?.domain || '').replace('.myshopify.com', '')}/settings/apps/development`} external>
+                  Open App Settings
+                </Button>
+              </BlockStack>
+            </div>
+
+            <Divider />
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#5C6AC4', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>2</div>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Create a new app called "FlexHunter"</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Click "Create an app" → name it "FlexHunter" → click Create
+                </Text>
+              </BlockStack>
+            </div>
+
+            <Divider />
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#5C6AC4', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>3</div>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Configure API scopes</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Click "Configure Admin API scopes" → check <strong>write_products</strong> and <strong>read_products</strong> → Save
+                </Text>
+              </BlockStack>
+            </div>
+
+            <Divider />
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#5C6AC4', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>4</div>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Install the app and copy the token</Text>
+                <Text as="p" variant="bodySm" tone="subdued">
+                  Click "Install app" → click "Reveal token once" → copy the Admin API access token
+                </Text>
+              </BlockStack>
+            </div>
+
+            <Divider />
+
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#008060', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>5</div>
+              <BlockStack gap="100">
+                <Text as="p" variant="bodyMd" fontWeight="semibold">Paste the token here</Text>
+                <TextField
+                  label="" labelHidden
+                  value={token} onChange={setToken}
+                  placeholder="shpat_xxxxx..."
+                  autoComplete="off"
+                />
+                <Button variant="primary" onClick={handleSave} disabled={!token.trim()} fullWidth>
+                  Connect Store
+                </Button>
+              </BlockStack>
+            </div>
+          </BlockStack>
         </BlockStack>
-      )}
-      {saved && <Banner tone="success" onDismiss={() => setSaved(false)}><Text as="p">Token saved!</Text></Banner>}
-      {showManual && (
-        <BlockStack gap="200">
-          <TextField
-            label="Shopify Admin API Access Token"
-            value={token} onChange={setToken}
-            placeholder="shpat_... or atkn_..."
-            autoComplete="off"
-            helpText="Shopify Admin > Settings > Apps > Develop apps > Admin API access token"
-          />
-          <Button variant="primary" onClick={handleSaveManual} disabled={!token.trim()}>Save Token</Button>
-        </BlockStack>
-      )}
+      </div>
+
+      {saved && <Banner tone="success" onDismiss={() => setSaved(false)}><Text as="p">Token saved! Products will now import to Shopify.</Text></Banner>}
     </BlockStack>
   );
 }
