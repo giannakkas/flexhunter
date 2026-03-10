@@ -5,6 +5,7 @@ import {
   InlineGrid, Modal, ProgressBar,
 } from '@shopify/polaris';
 import { useApi, apiFetch } from '../hooks/useApi';
+import { useNavigate } from 'react-router-dom';
 
 // ── Animated entrance wrapper ──────────────────
 function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
@@ -20,48 +21,110 @@ function FadeIn({ children, delay = 0 }: { children: React.ReactNode; delay?: nu
 }
 
 export function ResearchPage() {
+  const navigate = useNavigate();
   const { data: dna, get: getDna, loading: dnaLoading } = useApi<any>();
   const { data: status, get: getStatus } = useApi<any>();
-  const { post: startResearch, loading: researchLoading } = useApi();
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeProgress, setAnalyzeProgress] = useState(0);
   const [domainPreview, setDomainPreview] = useState<any>(null);
   const [domainInput, setDomainInput] = useState('');
   const [savedDomains, setSavedDomains] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [supplierStates, setSupplierStates] = useState<Record<string, boolean>>({});
+  const [shopConnected, setShopConnected] = useState<boolean | null>(null);
+  const [researchRunning, setResearchRunning] = useState(false);
+  const [researchProgress, setResearchProgress] = useState(0);
+  const [researchStage, setResearchStage] = useState('');
 
   const toggleSupplier = async (name: string) => {
-    const newState = supplierStates[name] === false ? true : false;
-    setSupplierStates(prev => ({ ...prev, [name]: !newState ? false : true }));
-    try { await apiFetch('/suppliers/toggle', { method: 'POST', body: JSON.stringify({ name, enabled: !newState ? false : true }) }); } catch {}
+    const current = supplierStates[name] !== false;
+    setSupplierStates(prev => ({ ...prev, [name]: !current }));
+    try { await apiFetch('/suppliers/toggle', { method: 'POST', body: JSON.stringify({ name, enabled: !current }) }); } catch {}
   };
 
   useEffect(() => {
     getDna('/store-dna');
     getStatus('/research/status');
-    // Load saved domains from localStorage
+    apiFetch<any>('/shop-status').then(r => setShopConnected(r.data?.hasToken || false)).catch(() => {});
     const saved = localStorage.getItem('fh_domains');
     if (saved) setSavedDomains(JSON.parse(saved));
   }, [getDna, getStatus]);
 
+  // Auto-dismiss messages
+  useEffect(() => {
+    if (message) {
+      const t = setTimeout(() => setMessage(null), 3500);
+      return () => clearTimeout(t);
+    }
+  }, [message]);
+
   const handleStartResearch = async () => {
-    await startResearch('/research/start');
-    setTimeout(() => getStatus('/research/status'), 1000);
+    setResearchRunning(true);
+    setResearchProgress(0);
+    setResearchStage('Initializing research pipeline...');
+
+    const stages = [
+      { at: 8, text: 'Loading store DNA and settings...' },
+      { at: 18, text: 'Analyzing domain intent signals...' },
+      { at: 30, text: 'Connecting to product sources...' },
+      { at: 42, text: 'Fetching candidate products from suppliers...' },
+      { at: 55, text: 'Normalizing multi-source product data...' },
+      { at: 65, text: 'Running 11-dimension scoring engine...' },
+      { at: 75, text: 'Evaluating domain fit and audience match...' },
+      { at: 85, text: 'Calculating margins and shipping scores...' },
+      { at: 92, text: 'Ranking products by weighted score...' },
+      { at: 97, text: 'Saving top candidates to database...' },
+    ];
+
+    // Animate progress
+    let prog = 0;
+    const interval = setInterval(() => {
+      prog += Math.random() * 3 + 0.5;
+      if (prog > 97) prog = 97;
+      setResearchProgress(prog);
+      const stage = [...stages].reverse().find(s => prog >= s.at);
+      if (stage) setResearchStage(stage.text);
+    }, 400);
+
+    try {
+      await apiFetch('/research/start', { method: 'POST' });
+      clearInterval(interval);
+      setResearchProgress(100);
+      setResearchStage('Research complete! Redirecting to candidates...');
+      await getStatus('/research/status');
+      setTimeout(() => {
+        setResearchRunning(false);
+        navigate('/candidates');
+      }, 1500);
+    } catch (err: any) {
+      clearInterval(interval);
+      setResearchRunning(false);
+      setMessage('Research failed: ' + err.message);
+    }
   };
 
   const handleAnalyzeStore = async () => {
     setAnalyzing(true);
+    setAnalyzeProgress(0);
+    const interval = setInterval(() => {
+      setAnalyzeProgress(p => {
+        if (p >= 95) return 95;
+        return p + Math.random() * 8 + 2;
+      });
+    }, 300);
+
     try {
       await apiFetch('/store-dna/analyze', { method: 'POST' });
-      setMessage('Store analysis started! Refreshing...');
-      setTimeout(async () => {
-        await getDna('/store-dna');
-        setAnalyzing(false);
-        setMessage('Store DNA updated.');
-      }, 3000);
+      clearInterval(interval);
+      setAnalyzeProgress(100);
+      await getDna('/store-dna');
+      setMessage('Store DNA updated.');
+      setTimeout(() => { setAnalyzing(false); setAnalyzeProgress(0); }, 1500);
     } catch (err: any) {
-      setMessage('Analysis failed: ' + err.message);
+      clearInterval(interval);
       setAnalyzing(false);
+      setAnalyzeProgress(0);
+      setMessage('Analysis failed: ' + err.message);
     }
   };
 
@@ -95,29 +158,101 @@ export function ResearchPage() {
     <Page
       title="Research Console"
       subtitle="Deep product research powered by your store's DNA"
-      primaryAction={{ content: 'Start Research', onAction: handleStartResearch, loading: researchLoading }}
-      secondaryActions={[{ content: 'Re-Analyze Store', onAction: handleAnalyzeStore, loading: analyzing }]}
+      primaryAction={{ content: researchRunning ? 'Researching...' : 'Start Research', onAction: handleStartResearch, loading: researchRunning, disabled: researchRunning }}
+      secondaryActions={[{ content: analyzing ? 'Analyzing...' : 'Re-Analyze Store', onAction: handleAnalyzeStore, loading: analyzing }]}
     >
       <BlockStack gap="500">
-        {message && <Banner tone="success" onDismiss={() => setMessage(null)}><Text as="p">{message}</Text></Banner>}
-
-        {status && status.status === 'RUNNING' && (
-          <Banner title="Research in Progress" tone="info">
-            <InlineStack gap="200" blockAlign="center">
-              <Spinner size="small" />
-              <Text as="p">Pipeline running. Results will appear in Candidates.</Text>
-            </InlineStack>
-          </Banner>
+        {/* Auto-dismiss message */}
+        {message && (
+          <div style={{ animation: 'fadeIn 0.3s ease', transition: 'opacity 0.5s ease' }}>
+            <Banner tone={message.includes('fail') ? 'critical' : 'success'} onDismiss={() => setMessage(null)}>
+              <Text as="p">{message}</Text>
+            </Banner>
+          </div>
         )}
 
-        {status && status.status === 'COMPLETED' && (
+        {/* Connection status */}
+        {shopConnected !== null && (
           <FadeIn>
-            <Banner title="Last Research Complete" tone="success">
-              <Text as="p">
-                Completed at {new Date(status.completedAt).toLocaleString()}.
-                {status.result?.totalSaved && ` Found ${status.result.totalSaved} new candidates.`}
+            <InlineStack gap="200">
+              <div style={{
+                width: 10, height: 10, borderRadius: '50%',
+                background: shopConnected ? '#008060' : '#D72C0D',
+                boxShadow: shopConnected ? '0 0 6px #008060' : '0 0 6px #D72C0D',
+              }} />
+              <Text as="span" variant="bodySm" tone={shopConnected ? 'success' : 'critical'}>
+                {shopConnected ? 'Shopify Connected' : 'Shopify Not Connected — imports won\'t appear in store'}
               </Text>
-            </Banner>
+            </InlineStack>
+          </FadeIn>
+        )}
+
+        {/* Research Progress Overlay */}
+        {researchRunning && (
+          <FadeIn>
+            <Card>
+              <BlockStack gap="400">
+                <InlineStack gap="200" blockAlign="center">
+                  <div style={{
+                    width: 40, height: 40, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #5C6AC4, #8B5CF6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'pulse 1.5s ease-in-out infinite',
+                  }}>
+                    <span style={{ fontSize: 20 }}>🔬</span>
+                  </div>
+                  <BlockStack gap="0">
+                    <Text as="h2" variant="headingMd">AI Research in Progress</Text>
+                    <Text as="p" variant="bodySm" tone="subdued">Finding winning products for your store...</Text>
+                  </BlockStack>
+                </InlineStack>
+
+                <div style={{ position: 'relative' }}>
+                  <div style={{ height: 12, borderRadius: 6, background: '#E4E5E7', overflow: 'hidden' }}>
+                    <div style={{
+                      height: '100%', borderRadius: 6,
+                      background: researchProgress >= 100
+                        ? 'linear-gradient(90deg, #008060, #00B386)'
+                        : 'linear-gradient(90deg, #5C6AC4, #8B5CF6, #5C6AC4)',
+                      backgroundSize: '200% 100%',
+                      animation: researchProgress < 100 ? 'shimmer 2s ease-in-out infinite' : 'none',
+                      width: `${researchProgress}%`,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </div>
+                  <style>{`@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }`}</style>
+                </div>
+
+                <InlineStack align="space-between">
+                  <Text as="p" variant="bodySm" tone="subdued">{researchStage}</Text>
+                  <Text as="p" variant="bodySm" fontWeight="bold">{Math.round(researchProgress)}%</Text>
+                </InlineStack>
+              </BlockStack>
+            </Card>
+          </FadeIn>
+        )}
+
+        {/* Analyze Progress */}
+        {analyzing && (
+          <FadeIn>
+            <Card>
+              <BlockStack gap="200">
+                <InlineStack align="space-between">
+                  <Text as="h3" variant="headingSm">Re-Analyzing Store DNA...</Text>
+                  <Text as="span" variant="bodySm" fontWeight="bold">{Math.round(analyzeProgress)}%</Text>
+                </InlineStack>
+                <div style={{ height: 8, borderRadius: 4, background: '#E4E5E7', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 4,
+                    background: analyzeProgress >= 100
+                      ? 'linear-gradient(90deg, #008060, #00B386)'
+                      : 'linear-gradient(90deg, #007ACE, #5C6AC4)',
+                    width: `${analyzeProgress}%`,
+                    transition: 'width 0.3s ease',
+                  }} />
+                </div>
+              </BlockStack>
+            </Card>
           </FadeIn>
         )}
 

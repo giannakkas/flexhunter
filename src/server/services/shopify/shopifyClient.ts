@@ -77,7 +77,7 @@ export async function fetchShopifyCollections(
 }
 
 /**
- * Create a product in Shopify via GraphQL
+ * Create a product in Shopify via REST API (most reliable method)
  */
 export async function createShopifyProduct(
   shopDomain: string,
@@ -92,48 +92,60 @@ export async function createShopifyProduct(
     images?: { src: string; altText?: string }[];
   }
 ): Promise<{ id: string; handle: string }> {
-  const mutation = `
-    mutation productCreate($input: ProductInput!) {
-      productCreate(input: $input) {
-        product {
-          id
-          handle
-          title
-          status
-        }
-        userErrors {
-          field
-          message
-        }
-      }
-    }
-  `;
+  const url = `https://${shopDomain}/admin/api/2024-01/products.json`;
 
-  const input: any = {
-    title: product.title,
-    descriptionHtml: product.descriptionHtml,
-    productType: product.productType || '',
-    tags: product.tags || [],
-    status: product.status || 'DRAFT',
+  const body: any = {
+    product: {
+      title: product.title,
+      body_html: product.descriptionHtml,
+      product_type: product.productType || '',
+      tags: (product.tags || []).join(', '),
+      status: (product.status || 'ACTIVE').toLowerCase(),
+      variants: product.variants?.map(v => ({
+        price: v.price,
+        compare_at_price: v.compareAtPrice || null,
+        sku: v.sku || '',
+        inventory_management: null,
+      })) || [{ price: '0.00' }],
+    },
   };
 
-  if (product.variants?.length) {
-    input.variants = product.variants.map((v) => ({
-      price: v.price,
-      compareAtPrice: v.compareAtPrice,
-      sku: v.sku,
+  if (product.images?.length) {
+    body.product.images = product.images.map(img => ({
+      src: img.src,
+      alt: img.altText || '',
     }));
   }
 
-  const data = await shopifyGraphQL({ shopDomain, accessToken }, mutation, { input });
+  console.log(`[Shopify] Creating product "${product.title}" on ${shopDomain}`);
 
-  if (data.productCreate.userErrors?.length > 0) {
-    throw new Error(`Shopify error: ${data.productCreate.userErrors.map((e: any) => e.message).join(', ')}`);
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Shopify-Access-Token': accessToken,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    console.error(`[Shopify] REST API error ${response.status}:`, text);
+    throw new Error(`Shopify API error ${response.status}: ${text.slice(0, 200)}`);
   }
 
+  const json = await response.json();
+  const created = json.product;
+
+  if (!created) {
+    throw new Error('Shopify returned empty product');
+  }
+
+  console.log(`[Shopify] Created product #${created.id}: "${created.title}"`);
+
   return {
-    id: data.productCreate.product.id,
-    handle: data.productCreate.product.handle,
+    id: `gid://shopify/Product/${created.id}`,
+    handle: created.handle,
   };
 }
 
