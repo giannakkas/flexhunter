@@ -322,7 +322,7 @@ export function DashboardPage() {
               <img
                 src="/logo.png"
                 alt="FlexHunter"
-                style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'contain' }}
+                style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }}
               />
               <div>
                 <div style={{ color: 'white', fontSize: 18, fontWeight: 700 }}>FlexHunter</div>
@@ -495,6 +495,7 @@ export function DashboardPage() {
             </BlockStack>
           </Card>
         </InlineGrid>
+        <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
   );

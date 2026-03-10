@@ -1,5 +1,5 @@
 import React from 'react';
-import { Frame, Navigation } from '@shopify/polaris';
+import { Frame, Navigation, TopBar } from '@shopify/polaris';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   HomeIcon,
@@ -18,7 +18,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   const navigationMarkup = (
     <Navigation location={location.pathname}>
       <Navigation.Section
-        title="FlexHunter"
+        title=""
         items={[
           {
             label: 'Dashboard',
@@ -73,7 +73,15 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <Frame navigation={navigationMarkup}>
+    <Frame
+      navigation={navigationMarkup}
+      logo={{
+        topBarSource: '/logo.png',
+        width: 140,
+        url: '/',
+        accessibilityLabel: 'FlexHunter',
+      }}
+    >
       {children}
     </Frame>
   );

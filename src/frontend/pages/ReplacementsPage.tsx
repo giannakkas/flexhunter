@@ -112,7 +112,7 @@ export function ReplacementsPage() {
             </IndexTable>
           </Card>
         )}
-        <div style={{ height: 60 }} />
+        <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
   );

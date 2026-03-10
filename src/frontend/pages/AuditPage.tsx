@@ -83,7 +83,7 @@ export function AuditPage() {
           </IndexTable>
         </Card>
       )}
-      <div style={{ height: 60 }} />
+      <div style={{ height: 80 }} />
     </Page>
   );
 }

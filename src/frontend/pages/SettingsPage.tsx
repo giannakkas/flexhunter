@@ -183,7 +183,7 @@ export function SettingsPage() {
           </BlockStack>
         </Card>
 
-        <div style={{ paddingBottom: 40 }} />
+        <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
   );
