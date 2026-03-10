@@ -6,6 +6,21 @@ import {
 } from '@shopify/polaris';
 import { useApi, apiFetch } from '../hooks/useApi';
 
+function AutoDismissBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => { setVisible(false); setTimeout(onDismiss, 400); }, 3000);
+    return () => clearTimeout(t);
+  }, [onDismiss]);
+  return (
+    <div style={{ opacity: visible ? 1 : 0, transition: 'opacity 0.4s ease', maxHeight: visible ? 200 : 0, overflow: 'hidden' }}>
+      <Banner tone={message.includes('Error') || message.includes('failed') ? 'critical' : 'success'} onDismiss={onDismiss}>
+        <Text as="p">{message}</Text>
+      </Banner>
+    </div>
+  );
+}
+
 function ScoreBar({ label, value, color }: { label: string; value: number; color: string }) {
   return (
     <BlockStack gap="100">
@@ -190,7 +205,7 @@ export function CandidatesPage() {
       secondaryActions={[{ content: 'Clear All', onAction: handleResetAll, destructive: true }]}
     >
       <BlockStack gap="400">
-        {message && <Banner tone="success" onDismiss={() => setMessage(null)}><Text as="p">{message}</Text></Banner>}
+        {message && <AutoDismissBanner message={message} onDismiss={() => setMessage(null)} />}
 
         <InlineStack align="space-between">
           <Tabs tabs={tabs} selected={selectedTab} onSelect={i => { setSelectedTab(i); setSearchQuery(''); setSelectedIds(new Set()); }} fitted />

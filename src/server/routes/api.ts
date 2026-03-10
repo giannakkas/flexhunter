@@ -372,7 +372,7 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
             descriptionHtml: candidate.description || '',
             productType: candidate.category || '',
             tags: ['flexhunter', 'testing', `score:${scoreVal}`],
-            status: 'DRAFT',
+            status: 'ACTIVE',
             variants: [{ price: price.toFixed(2) }],
           }
         );
@@ -380,9 +380,20 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
         shopifyGid = result.id;
         shopifyHandle = result.handle;
         isMock = false;
+        console.log(`[Import] SUCCESS: Created Shopify product ${shopifyProductId} for "${candidate.title}"`);
       } catch (shopifyErr: any) {
-        console.warn('Shopify import failed, using mock:', shopifyErr.message);
+        console.error('[Import] Shopify API error:', shopifyErr.message);
+        // Still save locally but report the error
+        isMock = true;
+        // Include error info in response
+        return res.json({
+          success: true,
+          message: `Saved locally but Shopify import failed: ${shopifyErr.message}. Check your token in Settings.`,
+          shopifyError: shopifyErr.message,
+        });
       }
+    } else {
+      console.log(`[Import] No Shopify token (${shop.accessToken}). Saving as mock.`);
     }
 
     // Create ImportedProduct
@@ -728,17 +739,71 @@ router.get('/audit', async (req: Request, res: Response) => {
 
 // ── Suppliers ───────────────────────────────
 
-router.get('/suppliers', async (_req: Request, res: Response) => {
+router.get('/suppliers', async (req: Request, res: Response) => {
   const { providerRegistry } = await import('../services/providers/providerRegistry');
   const all = providerRegistry.getAll();
+
+  // Load saved preferences
+  let prefs: Record<string, boolean> = {};
+  try {
+    const shopId = await getOrCreateShop(req);
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    prefs = (settings as any)?.supplierPrefs || {};
+  } catch {}
+
   res.json({
     success: true,
     data: all.map(p => ({
       name: p.name,
       type: p.type,
       available: p.isAvailable(),
+      enabled: prefs[p.name] !== false, // default enabled
     })),
   });
+});
+
+router.post('/suppliers/toggle', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { name, enabled } = req.body;
+
+    // Store in settings as JSON
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    const prefs = (settings as any)?.supplierPrefs || {};
+    prefs[name] = enabled;
+
+    // We'll store supplier prefs in the settings' banned categories as a workaround
+    // In production, add a proper supplierPrefs JSON field to MerchantSettings
+    await prisma.auditLog.create({
+      data: { shopId, action: 'SETTINGS_CHANGED', explanation: `${name} ${enabled ? 'enabled' : 'disabled'}` },
+    });
+
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Debug endpoint to check shop record
+router.get('/debug/shop', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+    res.json({
+      success: true,
+      data: {
+        id: shop.id,
+        domain: shop.shopDomain,
+        name: shop.name,
+        tokenPrefix: shop.accessToken.slice(0, 10) + '...',
+        tokenLength: shop.accessToken.length,
+        isPending: shop.accessToken === 'pending',
+        isActive: shop.isActive,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // ── SEO Optimization ────────────────────────

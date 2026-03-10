@@ -28,6 +28,13 @@ export function ResearchPage() {
   const [domainInput, setDomainInput] = useState('');
   const [savedDomains, setSavedDomains] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
+  const [supplierStates, setSupplierStates] = useState<Record<string, boolean>>({});
+
+  const toggleSupplier = async (name: string) => {
+    const newState = supplierStates[name] === false ? true : false;
+    setSupplierStates(prev => ({ ...prev, [name]: !newState ? false : true }));
+    try { await apiFetch('/suppliers/toggle', { method: 'POST', body: JSON.stringify({ name, enabled: !newState ? false : true }) }); } catch {}
+  };
 
   useEffect(() => {
     getDna('/store-dna');
@@ -274,7 +281,25 @@ export function ResearchPage() {
                             <span style={{ fontSize: 20 }}>{s.icon}</span>
                             <Text as="span" variant="bodySm" fontWeight="bold">{s.name}</Text>
                           </InlineStack>
-                          <Badge tone={s.tone}>{s.status}</Badge>
+                          <InlineStack gap="200" blockAlign="center">
+                            <Badge tone={s.tone}>{s.status}</Badge>
+                            <div
+                              onClick={() => toggleSupplier(s.name)}
+                              style={{
+                                width: 38, height: 20, borderRadius: 10, cursor: 'pointer',
+                                background: supplierStates[s.name] !== false ? '#008060' : '#D0D5DD',
+                                position: 'relative', transition: 'background 0.2s ease',
+                              }}
+                            >
+                              <div style={{
+                                width: 16, height: 16, borderRadius: '50%', background: 'white',
+                                position: 'absolute', top: 2,
+                                left: supplierStates[s.name] !== false ? 20 : 2,
+                                transition: 'left 0.2s ease',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                              }} />
+                            </div>
+                          </InlineStack>
                         </InlineStack>
                         <Text as="p" variant="bodySm" tone="subdued">{s.desc}</Text>
                         <Badge>{s.type}</Badge>
