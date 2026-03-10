@@ -177,9 +177,16 @@ export function ResearchPage() {
             </Text>
             <BlockStack gap="200">
               {[
-                { name: 'AliExpress', status: 'Mock Data (V1)', tone: 'attention' as const, desc: 'Using sample catalog. Real API integration coming in V2.' },
-                { name: 'CJ Dropshipping', status: 'Coming Soon', tone: 'subdued' as const, desc: 'Will connect via CJ API for faster shipping options.' },
-                { name: 'CSV / Feed Import', status: 'Available', tone: 'success' as const, desc: 'Upload your own product feed for scoring.' },
+                { name: 'AliExpress', status: 'Mock Data (V1)', tone: 'attention' as const, desc: 'Sample catalog active. Real API coming V2.' },
+                { name: 'CJ Dropshipping', status: 'Coming Soon', tone: 'subdued' as const, desc: 'Fast shipping via CJ API.' },
+                { name: 'Zendrop', status: 'Coming Soon', tone: 'subdued' as const, desc: 'US/EU warehouse products.' },
+                { name: 'Spocket', status: 'Coming Soon', tone: 'subdued' as const, desc: 'Premium suppliers, fast shipping.' },
+                { name: 'Alibaba', status: 'Coming Soon', tone: 'subdued' as const, desc: 'Bulk/wholesale product research.' },
+                { name: 'Temu Trends', status: 'Planned', tone: 'subdued' as const, desc: 'Trending product signals from Temu.' },
+                { name: 'TikTok Trends', status: 'Planned', tone: 'subdued' as const, desc: 'Viral product signals from TikTok Shop.' },
+                { name: 'Amazon Trends', status: 'Planned', tone: 'subdued' as const, desc: 'Bestseller and movers & shakers signals.' },
+                { name: 'Shopify Trends', status: 'Planned', tone: 'subdued' as const, desc: 'Competitor and market signals.' },
+                { name: 'CSV / Feed Import', status: 'Available', tone: 'success' as const, desc: 'Upload your own product feed.' },
               ].map((provider) => (
                 <div key={provider.name} style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',

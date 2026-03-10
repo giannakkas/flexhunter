@@ -65,6 +65,7 @@ export function SeoPage() {
         }),
       });
       setMessage({ text: 'SEO changes applied successfully!', tone: 'success' });
+      setTimeout(() => navigate('/imports'), 1500);
     } catch (err: any) {
       setMessage({ text: `Failed to apply: ${err.message}`, tone: 'critical' });
     }

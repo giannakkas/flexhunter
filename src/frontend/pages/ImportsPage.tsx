@@ -1,10 +1,10 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
-  IndexTable, EmptyState, ProgressBar, Banner,
+  IndexTable, EmptyState, ProgressBar, Banner, Thumbnail,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
-import { useApi } from '../hooks/useApi';
+import { useApi, apiFetch } from '../hooks/useApi';
 
 const STATUS_MAP: Record<string, { tone: any; label: string }> = {
   TESTING: { tone: 'attention', label: 'Testing' },
@@ -20,34 +20,43 @@ export function ImportsPage() {
   const navigate = useNavigate();
   const { data: imports, get, loading } = useApi<any[]>();
   const { post } = useApi();
+  const [shopStatus, setShopStatus] = useState<any>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => { get('/imports'); }, [get]);
+  useEffect(() => {
+    get('/imports');
+    apiFetch<any>('/shop-status').then(r => setShopStatus(r.data)).catch(() => {});
+  }, [get]);
 
-  const handlePin = async (id: string) => { await post(`/imports/${id}/pin`, { reason: 'Pinned by merchant' }); get('/imports'); };
+  const handlePin = async (id: string) => { await post(`/imports/${id}/pin`, { reason: 'Pinned' }); get('/imports'); };
   const handleUnpin = async (id: string) => { await post(`/imports/${id}/unpin`); get('/imports'); };
 
   const items = imports || [];
-  const hasNew = items.some((i: any) => !i.seoOptimized);
 
   const rowMarkup = items.map((item: any, index: number) => {
     const perf = item.performance;
     const st = STATUS_MAP[item.status] || { tone: 'info', label: item.status };
+    const imgUrl = item.candidate?.imageUrls?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
 
     return (
-      <IndexTable.Row id={item.id} key={item.id} position={index}>
+      <IndexTable.Row id={item.id} key={item.id} position={index} selected={selectedIds.has(item.id)}>
         <IndexTable.Cell>
-          <BlockStack gap="100">
-            <Text as="span" variant="bodyMd" fontWeight="semibold">{item.importedTitle}</Text>
-            <Text as="span" variant="bodySm" tone="subdued">
-              {item.shopifyHandle ? `/${item.shopifyHandle}` : 'Local only'}
-            </Text>
-          </BlockStack>
+          <InlineStack gap="300" blockAlign="center">
+            <Thumbnail source={imgUrl} alt={item.importedTitle} size="small" />
+            <BlockStack gap="0">
+              <Text as="span" variant="bodyMd" fontWeight="semibold">{item.importedTitle}</Text>
+              <Text as="span" variant="bodySm" tone="subdued">
+                {item.shopifyStatus === 'MOCK' ? 'Local only' : `/${item.shopifyHandle || ''}`}
+              </Text>
+            </BlockStack>
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Text as="span">${item.importedPrice?.toFixed(2) || '-'}</Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Badge tone={st.tone}>{st.label}</Badge>
+          {item.shopifyStatus === 'MOCK' && <Badge tone="warning">Not in Shopify</Badge>}
         </IndexTable.Cell>
         <IndexTable.Cell>
           {perf ? (
@@ -60,23 +69,14 @@ export function ImportsPage() {
           ) : <Text as="span" tone="subdued">-</Text>}
         </IndexTable.Cell>
         <IndexTable.Cell>
-          {perf ? (
-            <Text as="span" variant="bodySm">
-              {perf.views} views / {perf.conversions} sales
-            </Text>
-          ) : <Text as="span" tone="subdued">No data</Text>}
-        </IndexTable.Cell>
-        <IndexTable.Cell>
           <InlineStack gap="200">
-            <Button size="slim" variant="primary"
-              onClick={() => navigate(`/seo?product=${item.id}`)}>
-              Optimize SEO
+            <Button size="slim" variant="primary" onClick={() => navigate(`/seo?product=${item.id}`)}>
+              SEO
             </Button>
-            {item.isPinned ? (
-              <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
-            ) : (
-              <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
-            )}
+            {item.isPinned
+              ? <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
+              : <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
+            }
           </InlineStack>
         </IndexTable.Cell>
       </IndexTable.Row>
@@ -86,13 +86,32 @@ export function ImportsPage() {
   return (
     <Page title="Imported Products" subtitle={`${items.length} products`}>
       <BlockStack gap="400">
-        {hasNew && (
-          <Banner tone="info" title="Optimize your products for search">
+        {/* Shopify connection warning */}
+        {shopStatus && !shopStatus.hasToken && (
+          <Banner tone="critical" title="Products are NOT appearing in your Shopify store"
+            action={{ content: 'Connect Shopify Token', onAction: () => navigate('/settings') }}>
             <Text as="p">
-              Products perform better with optimized titles, descriptions, and meta tags.
-              Click "Optimize SEO" on each product for AI-powered recommendations.
+              Your store access token is missing. Go to Settings and paste your Shopify Admin API
+              access token to enable real product imports. Without it, products are saved locally only.
             </Text>
           </Banner>
+        )}
+
+        {shopStatus && shopStatus.hasToken && items.length > 0 && (
+          <Banner tone="info" title="Optimize your products for search">
+            <Text as="p">
+              Click "SEO" on any product for AI-powered title, description, and meta tag optimization.
+            </Text>
+          </Banner>
+        )}
+
+        {selectedIds.size > 0 && (
+          <InlineStack gap="200">
+            <Badge>{selectedIds.size} selected</Badge>
+            <Button size="slim" variant="primary" onClick={() => {
+              for (const id of selectedIds) navigate(`/seo?product=${id}`);
+            }}>Optimize SEO</Button>
+          </InlineStack>
         )}
 
         {items.length === 0 && !loading ? (
@@ -114,10 +133,19 @@ export function ImportsPage() {
                 { title: 'Price' },
                 { title: 'Status' },
                 { title: 'Health' },
-                { title: 'Performance' },
                 { title: 'Actions' },
               ]}
-              selectable={false}
+              selectable={true}
+              selectedItemsCount={selectedIds.size}
+              onSelectionChange={(type) => {
+                if (type === 'page') {
+                  selectedIds.size === items.length
+                    ? setSelectedIds(new Set())
+                    : setSelectedIds(new Set(items.map((i: any) => i.id)));
+                } else {
+                  setSelectedIds(new Set());
+                }
+              }}
               loading={loading}
             >
               {rowMarkup}
