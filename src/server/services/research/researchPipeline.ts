@@ -319,8 +319,6 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const curatedProducts = curation.selectedIndices
     .filter(i => i >= 0 && i < filtered.length)
     .map(i => filtered[i]);
-  // If AI curation returned too few, fill remaining from filtered pool
-  let finalCurated: NormalizedProduct[];
   // ONLY use AI-curated products — never pad with random unvetted ones
   let finalCurated: NormalizedProduct[];
   if (curatedProducts.length > 0) {
