@@ -39,7 +39,21 @@ function ScoreCircle({ value, size = 40 }: { value: number; size?: number }) {
       width: size, height: size, borderRadius: '50%', border: `3px solid ${c}`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: 'monospace', fontWeight: 700, fontSize: size * 0.35, color: c, flexShrink: 0,
+      background: 'rgba(255,255,255,0.9)',
     }}>{Math.round(value)}</div>
+  );
+}
+
+function RecBadge({ score, fitScore }: { score: number; fitScore?: number }) {
+  const fit = fitScore || score;
+  let label: string, bg: string, color: string;
+  if (fit < 30) { label = '⛔ Avoid'; bg = '#FEE2E2'; color = '#D72C0D'; }
+  else if (score >= 80 && fit >= 70) { label = '🔥 Strong Buy'; bg = '#D1FAE5'; color = '#008060'; }
+  else if (score >= 65 && fit >= 60) { label = '✅ Buy'; bg = '#E3F9ED'; color = '#008060'; }
+  else if (score >= 50) { label = '🤔 Maybe'; bg = '#FFF8E6'; color = '#B98900'; }
+  else { label = '⏭️ Skip'; bg = '#F6F6F7'; color = '#6D7175'; }
+  return (
+    <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, background: bg, color, whiteSpace: 'nowrap' }}>{label}</span>
   );
 }
 
@@ -137,23 +151,22 @@ export function CandidatesPage() {
   const handleResearch = async () => {
     setResearchRunning(true);
     setResearchProgress(0);
-    setResearchStage('Initializing AI research engine...');
+    setResearchStage('Initializing Multi-Agent AI Engine...');
 
     const stages = [
-      { at: 3, text: '🧬 Loading your store DNA profile...' },
-      { at: 8, text: '🔑 AI generating targeted search keywords...' },
-      { at: 15, text: '🌐 Connecting to AliExpress live API...' },
-      { at: 22, text: '📦 Connecting to CJ Dropshipping live API...' },
-      { at: 30, text: '🔍 Searching products across all suppliers...' },
-      { at: 40, text: '📊 AI analyzing product-market fit...' },
-      { at: 50, text: '🤖 Deep scoring audience match...' },
-      { at: 58, text: '📈 Evaluating trend momentum & virality...' },
-      { at: 65, text: '💰 Calculating profit margins & shipping...' },
-      { at: 72, text: '🎯 AI curating top products for your store...' },
-      { at: 80, text: '⚖️ Blending AI + algorithmic scores...' },
-      { at: 87, text: '🏆 Final ranking by weighted score...' },
-      { at: 93, text: '💾 Saving winning products...' },
-      { at: 97, text: '✅ Almost done...' },
+      { at: 3, text: '🧬 Step 1/6 — Building store DNA profile...' },
+      { at: 10, text: '🔑 Step 2/6 — AI generating 15 niche-specific keywords...' },
+      { at: 18, text: '🌐 Step 3/6 — Searching AliExpress & CJ Dropshipping...' },
+      { at: 28, text: '📦 Step 3/6 — Fetching products across all suppliers...' },
+      { at: 38, text: '🤖 Step 4/6 — AI Relevance Agent filtering products...' },
+      { at: 48, text: '🎯 Step 5/6 — Store Fit Agent analyzing each product...' },
+      { at: 55, text: '💰 Step 5/6 — Profit Agent calculating margins...' },
+      { at: 62, text: '📈 Step 5/6 — Trend Agent evaluating demand signals...' },
+      { at: 70, text: '🔍 Step 5/6 — Saturation Agent checking competition...' },
+      { at: 78, text: '🚚 Step 5/6 — Supplier Quality Agent scoring delivery...' },
+      { at: 85, text: '⚖️ Step 5/6 — Scoring Agent combining all signals...' },
+      { at: 92, text: '💾 Step 6/6 — Saving winning products...' },
+      { at: 97, text: '✅ Finalizing results...' },
     ];
 
     let prog = 0;
@@ -243,6 +256,7 @@ export function CandidatesPage() {
                   <InlineStack gap="100">
                     <Badge>{item.category || 'General'}</Badge>
                     {item.warehouseCountry && <Badge tone="info">{item.warehouseCountry}</Badge>}
+                    <RecBadge score={fs} fitScore={s?.domainFit} />
                   </InlineStack>
                 </BlockStack>
 
