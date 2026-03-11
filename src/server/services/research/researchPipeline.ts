@@ -122,36 +122,33 @@ async function aiCurateProducts(
     source: p.sourceName,
   }));
 
-  const prompt = `You are a product curator for a FOCUSED niche dropshipping store. From ${productSummaries.length} products, select EXACTLY ${maxResults} products that all belong in ONE cohesive store.
+  const prompt = `You are a STRICT product curator. The store sells: "${dna.description || settings.preferredCategories?.join(', ') || 'products'}".
 
-STORE PROFILE:
-- Domain: ${dna.domain}
-- Description: ${dna.description || 'dropshipping store'}
-- Target audience: ${settings.targetAudience?.join(', ') || 'general'}
-- Categories: ${settings.preferredCategories?.join(', ') || 'general'}
-- Price range: $${settings.priceRangeMin || 5} - $${settings.priceRangeMax || 100}
-- Brand vibe: ${dna.brandVibe}
+From ${productSummaries.length} products below, select ONLY products that a customer would expect to find in this specific store. 
+
+STORE: ${dna.description || 'dropshipping store'} | Audience: ${settings.targetAudience?.join(', ') || 'general'} | Price: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}
 
 PRODUCTS:
 ${JSON.stringify(productSummaries, null, 1)}
 
-RULES:
-- You MUST return EXACTLY ${maxResults} products — no fewer
-- ALL products must fit the store's niche and look like they belong together
-- Within the niche, maximize VARIETY — different product types, not 5 of the same thing
-- Prioritize: good reviews, high orders, reasonable shipping, good margin
-- If some products are borderline relevant, include them if you need to reach ${maxResults}
+STRICT RULES:
+- ONLY include products DIRECTLY related to "${dna.description || 'the store niche'}"
+- REJECT anything that doesn't obviously belong — when in doubt, EXCLUDE it
+- A sex toy does NOT belong in a hunting store. A camping table does NOT belong in a tech store.
+- If only 5 products are truly relevant, return only 5. Quality over quantity.
+- Maximum ${maxResults} products, but fewer is fine if the pool lacks relevant items
+- Each product must pass this test: "Would a customer shopping for ${dna.description || 'this niche'} want this?"
 
-Return ONLY a JSON object with:
-- "selectedIndices": array of EXACTLY ${maxResults} product idx numbers
-- "reasoning": what niche theme you chose`;
+Return ONLY JSON:
+- "selectedIndices": array of idx numbers (ONLY truly relevant products)
+- "reasoning": why these products fit the store`;
 
   try {
     const result = await aiComplete<{ selectedIndices: number[]; reasoning: string }>(prompt, {
       model: 'gpt-4o-mini',
-      temperature: 0.3,
+      temperature: 0.2,
       maxTokens: 1000,
-      systemPrompt: 'You are a product-market fit analyst. Return only valid JSON.',
+      systemPrompt: `You are a strict product relevance filter for a store that sells: "${dna.description}". REJECT anything not directly related. Return only valid JSON.`,
     });
 
     if (result.selectedIndices && Array.isArray(result.selectedIndices)) {
@@ -178,39 +175,40 @@ async function aiDeepScore(
   settings: MerchantSettingsData,
 ): Promise<{
   audienceFit: number; trendFit: number; visualVirality: number; novelty: number;
+  relevance: number;
   explanation: string; fitReasons: string[]; concerns: string[];
 }> {
-  const prompt = `Score this product for the store. Return JSON only.
+  const prompt = `Score this product for a store that sells: "${dna.description || 'products'}". Return JSON only.
 
-PRODUCT: "${product.title}" | ${product.category} | $${product.costPrice} cost → $${product.suggestedPrice} sell | ${product.reviewRating} stars | ${product.orderVolume} orders | ${product.sourceName} | Ships in ${product.shippingDays}d from ${product.warehouseCountry}
-DESCRIPTION: ${(product.description || '').slice(0, 200)}
-
-STORE: ${dna.domain} | ${dna.description || 'dropshipping store'} | Audience: ${settings.targetAudience?.join(', ')} | Categories: ${settings.preferredCategories?.join(', ')} | Vibe: ${dna.brandVibe}
+PRODUCT: "${product.title}" | ${product.category} | $${product.costPrice} cost | ${product.reviewRating} stars | ${product.orderVolume} orders
+STORE: "${dna.description}" | Audience: ${settings.targetAudience?.join(', ')}
 
 Score 0-100:
-- audienceFit: how well does this match the target audience?
-- trendFit: how trending/current is this product?
-- visualVirality: how shareable on social media?
-- novelty: how unique vs common dropship products?
+- relevance: does this product BELONG in this store? 0=completely unrelated, 100=perfect fit. A sex toy in a hunting store = 0. Hunting binoculars in a hunting store = 95.
+- audienceFit: would the target audience buy this?
+- trendFit: is this trending?
+- visualVirality: is it photogenic?
+- novelty: how unique?
 
 Also provide:
 - explanation: 1-2 sentence fit summary
-- fitReasons: 2-3 specific reasons it fits
-- concerns: 0-2 potential concerns
+- fitReasons: 2-3 reasons it fits (empty array if it doesn't fit)
+- concerns: potential concerns
 
 Return ONLY valid JSON.`;
 
   try {
     return await aiComplete(prompt, {
       model: 'gpt-4o-mini',
-      temperature: 0.3,
+      temperature: 0.2,
       maxTokens: 400,
-      systemPrompt: 'Product analyst. Return only JSON.',
+      systemPrompt: `Product relevance analyst for a "${dna.description}" store. Be STRICT with relevance scoring. Return only JSON.`,
     });
   } catch {
     return {
       audienceFit: 60, trendFit: 55, visualVirality: 50, novelty: 45,
-      explanation: 'AI scoring unavailable, using algorithmic estimates.',
+      relevance: 50,
+      explanation: 'AI scoring unavailable.',
       fitReasons: ['Available from supplier'], concerns: ['AI scoring failed'],
     };
   }
@@ -323,20 +321,15 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     .map(i => filtered[i]);
   // If AI curation returned too few, fill remaining from filtered pool
   let finalCurated: NormalizedProduct[];
-  if (curatedProducts.length >= maxCandidates) {
+  // ONLY use AI-curated products — never pad with random unvetted ones
+  let finalCurated: NormalizedProduct[];
+  if (curatedProducts.length > 0) {
     finalCurated = curatedProducts.slice(0, maxCandidates);
-  } else if (curatedProducts.length > 0) {
-    // Fill gaps with highest-volume products not already selected
-    const selectedIds = new Set(curatedProducts.map(p => `${p.providerType}-${p.providerProductId}`));
-    const extras = filtered
-      .filter(p => !selectedIds.has(`${p.providerType}-${p.providerProductId}`))
-      .sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0))
-      .slice(0, maxCandidates - curatedProducts.length);
-    finalCurated = [...curatedProducts, ...extras];
   } else {
-    finalCurated = filtered.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
+    // Fallback: take top 15 by order volume (AI completely failed)
+    finalCurated = filtered.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, 15);
   }
-  console.log(`[Research] Step 6/8: ${finalCurated.length} products curated (AI: ${curatedProducts.length}, filled: ${finalCurated.length - curatedProducts.length})`);
+  console.log(`[Research] Step 6/8: ${finalCurated.length} relevant products (AI curated: ${curatedProducts.length})`);
 
   // Step 7: Deep score each curated product (AI + algorithmic)
   const scored: (NormalizedProduct & { score: any; aiScore: any })[] = [];
@@ -384,7 +377,17 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
 
   // Sort by blended score
   scored.sort((a, b) => b.score.finalScore - a.score.finalScore);
-  console.log(`[Research] Step 7/8: Deep scored ${scored.length} products`);
+
+  // RELEVANCE FILTER: reject products AI rated as irrelevant
+  const relevant = scored.filter(p => {
+    const rel = p.aiScore?.relevance ?? 50;
+    if (rel < 35) {
+      console.log(`[Research] REJECTED "${p.title}" — relevance ${rel}/100`);
+      return false;
+    }
+    return true;
+  });
+  console.log(`[Research] Step 7/8: ${scored.length} scored → ${relevant.length} passed relevance filter (rejected ${scored.length - relevant.length})`);
 
   // Step 8: Clear old non-imported candidates and save new ones
   const deletedOld = await prisma.candidateProduct.deleteMany({
@@ -394,10 +397,10 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
       importedProduct: null,
     },
   });
-  console.log(`[Research] Step 8/8: Cleared ${deletedOld.count} old candidates, saving ${scored.length} new`);
+  console.log(`[Research] Step 8/8: Cleared ${deletedOld.count} old candidates, saving ${relevant.length} relevant products`);
 
   let savedCount = 0;
-  for (const product of scored) {
+  for (const product of relevant) {
     try {
       const candidate = await prisma.candidateProduct.create({
         data: {
@@ -468,7 +471,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
         totalFetched: rawProducts.length,
         unique: unique.length,
         aiCurated: finalCurated.length,
-        scored: scored.length,
+        scored: relevant.length,
         saved: savedCount,
         keywords,
         aiReasoning: curation.reasoning,
@@ -481,9 +484,9 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   return {
     batchId,
     totalFetched: rawProducts.length,
-    totalScored: scored.length,
+    totalScored: relevant.length,
     totalSaved: savedCount,
-    topCandidates: scored.slice(0, 5).map((p) => ({
+    topCandidates: relevant.slice(0, 5).map((p) => ({
       title: p.title,
       category: p.category,
       finalScore: p.score.finalScore,
