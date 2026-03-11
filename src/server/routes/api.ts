@@ -28,7 +28,18 @@ async function getOrCreateShop(req: Request): Promise<string> {
     if (shopId && shopId !== 'dev-shop-id') return shopId;
   }
 
+  // If domain is unknown, find the shop with a real token (standalone mode)
   if (!shopDomain || shopDomain === 'unknown') {
+    const shopWithToken = await prisma.shop.findFirst({
+      where: { accessToken: { not: 'pending' }, isActive: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (shopWithToken) return shopWithToken.id;
+
+    // Last resort: any shop
+    const anyShop = await prisma.shop.findFirst({ orderBy: { createdAt: 'desc' } });
+    if (anyShop) return anyShop.id;
+
     throw new Error('Unable to identify shop. Please reload the app.');
   }
 
