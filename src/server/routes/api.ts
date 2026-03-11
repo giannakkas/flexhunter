@@ -232,6 +232,75 @@ router.put('/store-dna', async (req: Request, res: Response) => {
   }
 });
 
+// Simple save — just 3 fields from the simplified Store DNA form
+router.post('/store-dna/simple-save', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { description, audience, priceMin, priceMax } = req.body;
+
+    // Update merchant settings
+    await prisma.merchantSettings.upsert({
+      where: { shopId },
+      create: {
+        shopId,
+        storeDescription: description || '',
+        targetAudience: audience ? audience.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+        priceRangeMin: priceMin || 10,
+        priceRangeMax: priceMax || 50,
+        onboardingComplete: true,
+        preferredCategories: [],
+        bannedCategories: [],
+        targetCountries: ['US', 'UK', 'CA', 'AU'],
+      },
+      update: {
+        storeDescription: description || undefined,
+        targetAudience: audience ? audience.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined,
+        priceRangeMin: priceMin || undefined,
+        priceRangeMax: priceMax || undefined,
+        onboardingComplete: true,
+      },
+    });
+
+    res.json({ success: true, message: 'Saved' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// AI suggest — enhance user's store description
+router.post('/store-dna/ai-suggest', async (req: Request, res: Response) => {
+  try {
+    const { description, audience, priceRange } = req.body;
+    const { aiComplete } = await import('../utils/ai');
+
+    const prompt = `You are helping a dropshipper describe their store more precisely. They wrote:
+
+Description: "${description}"
+Target audience: "${audience || 'not specified'}"
+Price range: "${priceRange || '$10-$50'}"
+
+Improve their description to be more specific and niche-focused. A good description helps AI find the RIGHT products.
+
+Return ONLY JSON:
+{
+  "description": "improved 1-2 sentence description that's very specific about what the store sells",
+  "audience": "specific audience description (age, interests, lifestyle)",
+  "priceRange": "suggested price range like $10-$50"
+}`;
+
+    const result = await aiComplete(prompt, {
+      model: 'gpt-4o-mini',
+      temperature: 0.5,
+      maxTokens: 300,
+      systemPrompt: 'Help the user describe their e-commerce store precisely. Return only JSON.',
+    });
+
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/store-dna/analyze', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
