@@ -30,6 +30,11 @@ export function ImportsPage() {
 
   const handlePin = async (id: string) => { await post(`/imports/${id}/pin`, { reason: 'Pinned' }); get('/imports'); };
   const handleUnpin = async (id: string) => { await post(`/imports/${id}/unpin`); get('/imports'); };
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this product? It will also be removed from Shopify.')) return;
+    try { await apiFetch(`/imports/${id}`, { method: 'DELETE' }); } catch {}
+    get('/imports');
+  };
 
   const items = imports || [];
 
@@ -77,6 +82,7 @@ export function ImportsPage() {
               ? <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
               : <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
             }
+            <Button size="slim" tone="critical" variant="plain" onClick={() => handleDelete(item.id)}>Delete</Button>
           </InlineStack>
         </IndexTable.Cell>
       </IndexTable.Row>

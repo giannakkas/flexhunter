@@ -592,6 +592,61 @@ router.post('/imports/:id/unpin', async (req: Request, res: Response) => {
   }
 });
 
+// Delete imported product (from DB + optionally from Shopify)
+router.delete('/imports/:id', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const shopId = await getOrCreateShop(req);
+
+    const imported = await prisma.importedProduct.findUniqueOrThrow({
+      where: { id },
+      include: { candidate: true },
+    });
+
+    // Try to delete from Shopify if it was a real import
+    if (imported.shopifyProductId && imported.shopifyStatus !== 'MOCK') {
+      try {
+        const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+        if (shop.accessToken && shop.accessToken !== 'pending') {
+          const url = `https://${shop.shopDomain}/admin/api/2024-01/products/${imported.shopifyProductId}.json`;
+          const r = await fetch(url, {
+            method: 'DELETE',
+            headers: { 'X-Shopify-Access-Token': shop.accessToken },
+          });
+          console.log(`[Import] Deleted Shopify product ${imported.shopifyProductId}: ${r.status}`);
+        }
+      } catch (err: any) {
+        console.warn(`[Import] Failed to delete from Shopify: ${err.message}`);
+      }
+    }
+
+    // Reset candidate status back to CANDIDATE so it can be re-evaluated
+    if (imported.candidateId) {
+      await prisma.candidateProduct.update({
+        where: { id: imported.candidateId },
+        data: { status: 'CANDIDATE' },
+      }).catch(() => {});
+    }
+
+    // Delete the imported product record
+    await prisma.importedProduct.delete({ where: { id } });
+
+    await prisma.auditLog.create({
+      data: {
+        shopId,
+        action: 'PRODUCT_DELETED',
+        entityType: 'ImportedProduct',
+        entityId: id,
+        explanation: `Deleted "${imported.importedTitle}"`,
+      },
+    });
+
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Replacements ───────────────────────────────
 
 router.get('/replacements', async (req: Request, res: Response) => {

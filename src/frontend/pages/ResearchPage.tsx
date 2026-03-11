@@ -74,27 +74,32 @@ export function ResearchPage() {
     setResearchStage('Initializing research pipeline...');
 
     const stages = [
-      { at: 8, text: 'Loading store DNA and settings...' },
-      { at: 18, text: 'Analyzing domain intent signals...' },
-      { at: 30, text: 'Connecting to product sources...' },
-      { at: 42, text: 'Fetching candidate products from suppliers...' },
-      { at: 55, text: 'Normalizing multi-source product data...' },
-      { at: 65, text: 'Running 11-dimension scoring engine...' },
-      { at: 75, text: 'Evaluating domain fit and audience match...' },
-      { at: 85, text: 'Calculating margins and shipping scores...' },
-      { at: 92, text: 'Ranking products by weighted score...' },
-      { at: 97, text: 'Saving top candidates to database...' },
+      { at: 4, text: '🧬 Building store DNA profile...' },
+      { at: 10, text: '🔍 Analyzing domain intent and audience signals...' },
+      { at: 16, text: '🤖 AI generating targeted search queries...' },
+      { at: 22, text: '🌐 Connecting to AliExpress, CJ, and 6 more sources...' },
+      { at: 30, text: '📦 Fetching products from 8 suppliers...' },
+      { at: 38, text: '🔄 Deduplicating and filtering banned categories...' },
+      { at: 44, text: '📊 Running 11-dimension code-based scoring...' },
+      { at: 52, text: '🤖 AI deep-analyzing top candidates for audience fit...' },
+      { at: 60, text: '🤖 AI evaluating trend momentum and virality...' },
+      { at: 68, text: '🤖 AI scoring product-market novelty...' },
+      { at: 75, text: '⚖️ Blending AI scores with algorithmic analysis...' },
+      { at: 82, text: '💰 Calculating profit margins and shipping scores...' },
+      { at: 88, text: '🏆 Final ranking by weighted AI-enhanced score...' },
+      { at: 93, text: '💾 Saving top candidates to database...' },
+      { at: 97, text: '✅ Finalizing research results...' },
     ];
 
-    // Animate progress
+    // Animate progress over ~45 seconds
     let prog = 0;
     const interval = setInterval(() => {
-      prog += Math.random() * 3 + 0.5;
+      prog += Math.random() * 1.2 + 0.3;
       if (prog > 97) prog = 97;
       setResearchProgress(prog);
       const stage = [...stages].reverse().find(s => prog >= s.at);
       if (stage) setResearchStage(stage.text);
-    }, 400);
+    }, 600);
 
     try {
       await apiFetch('/research/start', { method: 'POST' });
