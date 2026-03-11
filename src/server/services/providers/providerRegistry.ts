@@ -5,6 +5,8 @@
 // V2: Connect real APIs per provider.
 
 import { NormalizedProduct } from '../../../shared/types';
+import { searchCJProducts } from './cjClient';
+import { searchAliExpressProducts } from './aliexpressClient';
 
 // ── Provider Interface ─────────────────────────
 
@@ -698,14 +700,62 @@ export class ProviderRegistry {
   private providers: Map<string, SourceProvider> = new Map();
 
   constructor() {
-    // Product sources (all have mock data)
-    this.register(mockProvider('ALIEXPRESS', 'AliExpress', aliexpressProducts));
-    this.register(mockProvider('CJ_DROPSHIPPING', 'CJ Dropshipping', cjProducts));
+    // ── LIVE + FALLBACK providers ──
+    // AliExpress: live via RapidAPI if RAPIDAPI_KEY set, else mock
+    this.register({
+      type: 'ALIEXPRESS', name: 'AliExpress',
+      isAvailable: () => true,
+      async searchProducts(params) {
+        if (process.env.RAPIDAPI_KEY) {
+          try {
+            const results = await searchAliExpressProducts({
+              keyword: params.keywords.join(' '),
+              page: params.page || 1,
+              minPrice: params.minPrice,
+              maxPrice: params.maxPrice,
+            });
+            if (results.length > 0) return results.slice(0, params.limit || 20);
+          } catch (err: any) {
+            console.warn(`[AliExpress] Live API failed, falling back to mock: ${err.message}`);
+          }
+        }
+        console.log(`[AliExpress] Using mock data (set RAPIDAPI_KEY for live)`);
+        return aliexpressProducts.slice(0, params.limit || 20);
+      },
+      async getProductDetails() { return null; },
+    });
+
+    // CJ Dropshipping: live via CJ API if CJ_API_KEY set, else mock
+    this.register({
+      type: 'CJ_DROPSHIPPING', name: 'CJ Dropshipping',
+      isAvailable: () => true,
+      async searchProducts(params) {
+        if (process.env.CJ_API_KEY) {
+          try {
+            const results = await searchCJProducts({
+              keyword: params.keywords.join(' '),
+              page: params.page || 1,
+              size: params.limit || 20,
+              startSellPrice: params.minPrice,
+              endSellPrice: params.maxPrice,
+            });
+            if (results.length > 0) return results;
+          } catch (err: any) {
+            console.warn(`[CJ] Live API failed, falling back to mock: ${err.message}`);
+          }
+        }
+        console.log(`[CJ] Using mock data (set CJ_API_KEY for live)`);
+        return cjProducts.slice(0, params.limit || 20);
+      },
+      async getProductDetails() { return null; },
+    });
+
+    // ── MOCK-ONLY providers (no public API) ──
     this.register(mockProvider('CJ_DROPSHIPPING', 'Zendrop', zendropProducts));
     this.register(mockProvider('CJ_DROPSHIPPING', 'Spocket', spocketProducts));
     this.register(mockProvider('ALIEXPRESS', 'Alibaba', alibabaProducts));
 
-    // Trend signal sources (all have mock data)
+    // Trend signal sources (mock data)
     this.register(mockProvider('MANUAL', 'Temu Trends', temuProducts));
     this.register(mockProvider('MANUAL', 'TikTok Trends', tiktokProducts));
     this.register(mockProvider('MANUAL', 'Amazon Trends', amazonProducts));
@@ -723,6 +773,13 @@ export class ProviderRegistry {
       async searchProducts() { return []; },
       async getProductDetails() { return null; },
     });
+  }
+
+  /** Check if a provider is running in live API mode */
+  isLive(name: string): boolean {
+    if (name === 'AliExpress') return !!process.env.RAPIDAPI_KEY;
+    if (name === 'CJ Dropshipping') return !!process.env.CJ_API_KEY;
+    return false;
   }
 
   register(provider: SourceProvider): void {

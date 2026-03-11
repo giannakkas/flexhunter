@@ -769,6 +769,7 @@ router.get('/suppliers', async (req: Request, res: Response) => {
       type: p.type,
       available: p.isAvailable(),
       enabled: prefs[p.name] !== false, // default enabled
+      live: providerRegistry.isLive(p.name),
     })),
   });
 });

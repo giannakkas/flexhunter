@@ -31,6 +31,7 @@ export function ResearchPage() {
   const [savedDomains, setSavedDomains] = useState<string[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [supplierStates, setSupplierStates] = useState<Record<string, boolean>>({});
+  const [supplierLive, setSupplierLive] = useState<Record<string, boolean>>({});
   const [shopConnected, setShopConnected] = useState<boolean | null>(null);
   const [researchRunning, setResearchRunning] = useState(false);
   const [researchProgress, setResearchProgress] = useState(0);
@@ -46,6 +47,15 @@ export function ResearchPage() {
     getDna('/store-dna');
     getStatus('/research/status');
     apiFetch<any>('/shop-status').then(r => setShopConnected(r.data?.hasToken || false)).catch(() => {});
+    apiFetch<any>('/suppliers').then(r => {
+      if (r.data) {
+        const live: Record<string, boolean> = {};
+        const states: Record<string, boolean> = {};
+        for (const s of r.data) { live[s.name] = s.live; states[s.name] = s.enabled; }
+        setSupplierLive(live);
+        setSupplierStates(states);
+      }
+    }).catch(() => {});
     const saved = localStorage.getItem('fh_domains');
     if (saved) setSavedDomains(JSON.parse(saved));
   }, [getDna, getStatus]);
@@ -390,15 +400,14 @@ export function ResearchPage() {
 
               <InlineGrid columns={3} gap="300">
                 {[
-                  { name: 'AliExpress', icon: '🛒', status: 'Active', tone: 'success' as const, type: 'Supplier', desc: 'Mock catalog (V1). Real API in V2.' },
-                  { name: 'CJ Dropshipping', icon: '📦', status: 'Ready', tone: 'info' as const, type: 'Supplier', desc: 'Fast US/EU shipping. API key required.' },
-                  { name: 'Zendrop', icon: '🚀', status: 'Ready', tone: 'info' as const, type: 'Supplier', desc: 'US warehouses. API key required.' },
-                  { name: 'Spocket', icon: '💎', status: 'Ready', tone: 'info' as const, type: 'Supplier', desc: 'Premium suppliers. API key required.' },
-                  { name: 'Alibaba', icon: '🏭', status: 'Ready', tone: 'info' as const, type: 'Supplier', desc: 'Wholesale research. API key required.' },
-                  { name: 'Temu Trends', icon: '🔥', status: 'Active', tone: 'success' as const, type: 'Trends', desc: 'Trending product signals.' },
-                  { name: 'TikTok Trends', icon: '📱', status: 'Active', tone: 'success' as const, type: 'Trends', desc: 'Viral product signals.' },
-                  { name: 'Amazon Trends', icon: '📊', status: 'Active', tone: 'success' as const, type: 'Trends', desc: 'Bestseller & movers signals.' },
-                  { name: 'Shopify Signals', icon: '🏪', status: 'Active', tone: 'success' as const, type: 'Trends', desc: 'Competitor & market signals.' },
+                  { name: 'AliExpress', icon: '🛒', type: 'Supplier', desc: 'Real-time product search via API.' },
+                  { name: 'CJ Dropshipping', icon: '📦', type: 'Supplier', desc: 'Fast US/EU shipping. Live API.' },
+                  { name: 'Zendrop', icon: '🚀', type: 'Supplier', desc: 'US warehouses. Quality focused.' },
+                  { name: 'Spocket', icon: '💎', type: 'Supplier', desc: 'Premium US/EU suppliers.' },
+                  { name: 'Alibaba', icon: '🏭', type: 'Supplier', desc: 'Wholesale & bulk research.' },
+                  { name: 'Temu Trends', icon: '🔥', type: 'Trends', desc: 'Trending product signals.' },
+                  { name: 'TikTok Trends', icon: '📱', type: 'Trends', desc: 'Viral product signals.' },
+                  { name: 'Amazon Trends', icon: '📊', type: 'Trends', desc: 'Bestseller & movers signals.' },
                 ].map((s, i) => (
                   <FadeIn key={s.name} delay={350 + i * 50}>
                     <div style={{
@@ -417,7 +426,7 @@ export function ResearchPage() {
                             <Text as="span" variant="bodySm" fontWeight="bold">{s.name}</Text>
                           </InlineStack>
                           <InlineStack gap="200" blockAlign="center">
-                            <Badge tone={s.tone}>{s.status}</Badge>
+                            <Badge tone={supplierLive[s.name] ? 'success' : 'info'}>{supplierLive[s.name] ? 'LIVE' : 'Mock'}</Badge>
                             <div
                               onClick={() => toggleSupplier(s.name)}
                               style={{
