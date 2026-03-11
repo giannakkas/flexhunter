@@ -6,6 +6,8 @@ import {
 } from '@shopify/polaris';
 import { useApi, apiFetch } from '../hooks/useApi';
 
+const PLACEHOLDER_IMG = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
+
 function AutoDismissBanner({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const [visible, setVisible] = useState(true);
   useEffect(() => {
@@ -35,10 +37,16 @@ function ScoreBar({ label, value, color }: { label: string; value: number; color
   );
 }
 
+function ImgWithFallback({ src, size = 40 }: { src?: string; size?: number }) {
+  const [errored, setErrored] = useState(false);
+  const url = (!src || errored) ? PLACEHOLDER_IMG : src;
+  return <img src={url} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: 6, background: '#f0f0f0' }} onError={() => setErrored(true)} />;
+}
+
 export function CandidatesPage() {
   const { data: candidates, get, loading } = useApi<any[]>();
   const [selectedTab, setSelectedTab] = useState(0);
-  const [selectedCandidate, setSelectedCandidate] = useState<any>(null);
+  const [previewItem, setPreviewItem] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [message, setMessage] = useState<string | null>(null);
@@ -67,7 +75,7 @@ export function CandidatesPage() {
     try { const r = await apiFetch<any>(`/candidates/${id}/approve`, { method: 'POST' }); setMessage(r.message || 'Imported!'); }
     catch (e: any) { setMessage(`Error: ${e.message}`); }
     await get(`/candidates?status=${statusFilter}&sort=score`);
-    setActionLoading(null); setSelectedCandidate(null);
+    setActionLoading(null); setPreviewItem(null);
   };
 
   const handleReject = (id: string) => doAction(async () => { setActionLoading(id); await apiFetch(`/candidates/${id}/reject`, { method: 'POST' }); setActionLoading(null); });
@@ -101,31 +109,42 @@ export function CandidatesPage() {
     }});
   };
 
-  const toggleSelect = (id: string) => setSelectedIds(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n; });
-
   const items = (candidates || []).filter((i: any) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return i.title.toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q);
+    return i.title.toLowerCase().includes(q) || (i.category || '').toLowerCase().includes(q) || (i.sourceName || '').toLowerCase().includes(q);
   });
 
-  // ── Row Markup (compact) ─────────────────────
+  const profit = (item: any) => {
+    if (!item.costPrice || !item.suggestedPrice) return null;
+    return item.suggestedPrice - item.costPrice;
+  };
+  const margin = (item: any) => {
+    if (!item.costPrice || !item.suggestedPrice) return null;
+    return ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100);
+  };
+
+  // ── Row Markup ──────────────────────────────
   const rowMarkup = items.map((item: any, idx: number) => {
     const s = item.score; const fs = s?.finalScore || 0;
     const sc = fs >= 80 ? '#008060' : fs >= 65 ? '#47B881' : fs >= 50 ? '#B98900' : fs >= 35 ? '#DE6E1E' : '#D72C0D';
-    const m = item.costPrice && item.suggestedPrice ? ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100).toFixed(0) + '%' : '-';
+    const m = margin(item);
 
     return (
       <IndexTable.Row id={item.id} key={item.id} position={idx} selected={selectedIds.has(item.id)}>
         <IndexTable.Cell>
           <InlineStack gap="300" blockAlign="center">
             <div style={{ width: 32, height: 32, borderRadius: '50%', border: `2px solid ${sc}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontWeight: 700, fontSize: 12, flexShrink: 0 }}>{fs.toFixed(0)}</div>
-            <Thumbnail source={item.imageUrls?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'} alt="" size="small" />
+            <ImgWithFallback src={item.imageUrls?.[0]} size={40} />
             <BlockStack gap="0">
-              <Button variant="plain" onClick={() => setSelectedCandidate(item)}>
-                <Text as="span" variant="bodySm" fontWeight="semibold">{item.title.length > 40 ? item.title.slice(0, 40) + '...' : item.title}</Text>
-              </Button>
-              <Text as="span" variant="bodySm" tone="subdued">{item.category}</Text>
+              <button onClick={() => setPreviewItem(item)} style={{ all: 'unset', cursor: 'pointer', color: '#2C6ECB', fontWeight: 600, fontSize: 13 }}>
+                {item.title.length > 42 ? item.title.slice(0, 42) + '...' : item.title}
+              </button>
+              <InlineStack gap="100">
+                <Text as="span" variant="bodySm" tone="subdued">{item.category || 'General'}</Text>
+                <Text as="span" variant="bodySm" tone="subdued">·</Text>
+                <Text as="span" variant="bodySm" tone="subdued">{item.sourceName || item.providerType}</Text>
+              </InlineStack>
             </BlockStack>
           </InlineStack>
         </IndexTable.Cell>
@@ -135,10 +154,12 @@ export function CandidatesPage() {
             <Text as="span" variant="bodySm" tone="subdued">Cost ${item.costPrice?.toFixed(2)}</Text>
           </BlockStack>
         </IndexTable.Cell>
-        <IndexTable.Cell><Text as="span" tone="success" fontWeight="semibold">{m}</Text></IndexTable.Cell>
+        <IndexTable.Cell><Text as="span" tone="success" fontWeight="semibold">{m !== null ? m.toFixed(0) + '%' : '-'}</Text></IndexTable.Cell>
         <IndexTable.Cell><Text as="span" variant="bodySm">{item.shippingDays}d</Text></IndexTable.Cell>
         <IndexTable.Cell>
           <InlineStack gap="100">
+            <Button size="micro" onClick={() => setPreviewItem(item)}>View</Button>
+            {item.sourceUrl && <Button size="micro" url={item.sourceUrl} external>Source</Button>}
             {item.status === 'CANDIDATE' && <>
               <Button size="micro" variant="primary" onClick={() => handleApprove(item.id)} loading={actionLoading === item.id}>Import</Button>
               <Button size="micro" onClick={() => handleReject(item.id)}>Skip</Button>
@@ -157,18 +178,22 @@ export function CandidatesPage() {
       {items.map((item: any) => {
         const s = item.score; const fs = s?.finalScore || 0;
         const sc = fs >= 80 ? '#008060' : fs >= 65 ? '#47B881' : fs >= 50 ? '#B98900' : fs >= 35 ? '#DE6E1E' : '#D72C0D';
-        const m = item.costPrice && item.suggestedPrice ? ((item.suggestedPrice - item.costPrice) / item.suggestedPrice * 100).toFixed(0) : '-';
+        const m = margin(item);
+        const p = profit(item);
         return (
           <Card key={item.id}>
             <BlockStack gap="300">
               <InlineStack align="space-between" blockAlign="start">
                 <InlineStack gap="300" blockAlign="start">
-                  <Thumbnail source={item.imageUrls?.[0] || 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'} alt="" size="medium" />
+                  <ImgWithFallback src={item.imageUrls?.[0]} size={56} />
                   <BlockStack gap="100">
-                    <Button variant="plain" onClick={() => setSelectedCandidate(item)}>
-                      <Text as="span" variant="headingSm">{item.title}</Text>
-                    </Button>
-                    <Badge tone="info">{item.category || 'General'}</Badge>
+                    <button onClick={() => setPreviewItem(item)} style={{ all: 'unset', cursor: 'pointer', color: '#2C6ECB', fontWeight: 600, fontSize: 14 }}>
+                      {item.title}
+                    </button>
+                    <InlineStack gap="100">
+                      <Badge tone="info">{item.category || 'General'}</Badge>
+                      <Badge>{item.sourceName || item.providerType}</Badge>
+                    </InlineStack>
                   </BlockStack>
                 </InlineStack>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', border: `3px solid ${sc}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'monospace', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>{fs.toFixed(0)}</div>
@@ -176,13 +201,14 @@ export function CandidatesPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8, background: '#FAFBFC', borderRadius: 8, padding: '10px 12px' }}>
                 <div><div style={{ fontSize: 10, color: '#6D7175' }}>Sell</div><div style={{ fontWeight: 600, fontSize: 14 }}>${item.suggestedPrice?.toFixed(2)}</div></div>
                 <div><div style={{ fontSize: 10, color: '#6D7175' }}>Cost</div><div style={{ fontWeight: 600, fontSize: 14 }}>${item.costPrice?.toFixed(2)}</div></div>
-                <div><div style={{ fontSize: 10, color: '#6D7175' }}>Margin</div><div style={{ fontWeight: 600, fontSize: 14, color: '#008060' }}>{m}%</div></div>
-                <div><div style={{ fontSize: 10, color: '#6D7175' }}>Ships</div><div style={{ fontWeight: 600, fontSize: 14 }}>{item.shippingDays}d</div></div>
+                <div><div style={{ fontSize: 10, color: '#6D7175' }}>Margin</div><div style={{ fontWeight: 600, fontSize: 14, color: '#008060' }}>{m !== null ? m.toFixed(0) : '-'}%</div></div>
+                <div><div style={{ fontSize: 10, color: '#6D7175' }}>Profit</div><div style={{ fontWeight: 600, fontSize: 14, color: '#008060' }}>${p !== null ? p.toFixed(2) : '-'}</div></div>
               </div>
               {s?.fitReasons?.length > 0 && <InlineStack gap="200" wrap>{s.fitReasons.slice(0, 2).map((r: string, i: number) => <Badge key={i} tone="success">{r}</Badge>)}</InlineStack>}
               <Divider />
               <InlineStack gap="200" align="end">
                 <Button size="slim" tone="critical" variant="plain" onClick={() => handleDelete(item.id)}>Delete</Button>
+                {item.sourceUrl && <Button size="slim" url={item.sourceUrl} external>Source</Button>}
                 {item.status === 'CANDIDATE' && <>
                   <Button size="slim" onClick={() => handleReject(item.id)}>Skip</Button>
                   <Button size="slim" variant="primary" onClick={() => handleApprove(item.id)} loading={actionLoading === item.id}>Import</Button>
@@ -194,6 +220,108 @@ export function CandidatesPage() {
         );
       })}
     </InlineGrid>
+  );
+
+  // ── Preview Modal ──────────────────────────────
+  const previewModal = previewItem && (
+    <Modal open onClose={() => setPreviewItem(null)} title={previewItem.title} size="large"
+      primaryAction={previewItem.status === 'CANDIDATE' ? { content: 'Import to Store', onAction: () => handleApprove(previewItem.id), loading: actionLoading === previewItem.id } : undefined}
+      secondaryActions={[
+        ...(previewItem.sourceUrl ? [{ content: 'View on Source', onAction: () => window.open(previewItem.sourceUrl, '_blank'), external: true }] : []),
+        { content: 'Close', onAction: () => setPreviewItem(null) },
+      ]}
+    >
+      <Modal.Section>
+        <BlockStack gap="400">
+          {/* Images */}
+          <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+            {(previewItem.imageUrls || []).length > 0 ? (
+              previewItem.imageUrls.map((url: string, i: number) => (
+                <ImgWithFallback key={i} src={url} size={120} />
+              ))
+            ) : (
+              <ImgWithFallback size={120} />
+            )}
+          </div>
+
+          {/* Pricing Card */}
+          <div style={{ background: '#F0F5FF', borderRadius: 10, padding: '16px 20px', border: '1px solid #B4D5FE' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, textAlign: 'center' }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#6D7175', marginBottom: 2 }}>Selling Price</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>${previewItem.suggestedPrice?.toFixed(2)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#6D7175', marginBottom: 2 }}>Cost Price</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>${previewItem.costPrice?.toFixed(2)}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#6D7175', marginBottom: 2 }}>Profit</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#008060' }}>${profit(previewItem)?.toFixed(2) || '-'}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#6D7175', marginBottom: 2 }}>Margin</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: '#008060' }}>{margin(previewItem)?.toFixed(0) || '-'}%</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, color: '#6D7175', marginBottom: 2 }}>Shipping</div>
+                <div style={{ fontSize: 20, fontWeight: 700 }}>{previewItem.shippingDays}d</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          <BlockStack gap="200">
+            <Text as="h3" variant="headingSm">Description</Text>
+            <Text as="p" variant="bodySm">{previewItem.description || 'No description available.'}</Text>
+          </BlockStack>
+
+          {/* Metadata */}
+          <InlineStack gap="200" wrap>
+            <Badge>{previewItem.sourceName || previewItem.providerType}</Badge>
+            <Badge tone="info">{previewItem.category || 'General'}</Badge>
+            {previewItem.subcategory && <Badge>{previewItem.subcategory}</Badge>}
+            {previewItem.warehouseCountry && <Badge>Ships from {previewItem.warehouseCountry}</Badge>}
+            {previewItem.shippingSpeed && <Badge>{previewItem.shippingSpeed}</Badge>}
+            {previewItem.reviewCount > 0 && <Badge tone="success">{previewItem.reviewRating?.toFixed(1)} ({previewItem.reviewCount.toLocaleString()} reviews)</Badge>}
+            {previewItem.orderVolume > 0 && <Badge>{previewItem.orderVolume.toLocaleString()} orders</Badge>}
+          </InlineStack>
+
+          {/* Score Breakdown */}
+          {previewItem.score && <>
+            <Divider />
+            <Text as="h3" variant="headingSm">Score Breakdown (Overall: {previewItem.score.finalScore?.toFixed(0)}/100)</Text>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <ScoreBar label="Domain Fit" value={previewItem.score.domainFit} color="#5C6AC4" />
+              <ScoreBar label="Store Fit" value={previewItem.score.storeFit} color="#5C6AC4" />
+              <ScoreBar label="Audience" value={previewItem.score.audienceFit} color="#007ACE" />
+              <ScoreBar label="Trend" value={previewItem.score.trendFit} color="#007ACE" />
+              <ScoreBar label="Virality" value={previewItem.score.visualVirality} color="#9C6ADE" />
+              <ScoreBar label="Novelty" value={previewItem.score.novelty} color="#9C6ADE" />
+              <ScoreBar label="Price Fit" value={previewItem.score.priceFit} color="#008060" />
+              <ScoreBar label="Margin Fit" value={previewItem.score.marginFit} color="#008060" />
+              <ScoreBar label="Shipping" value={previewItem.score.shippingFit} color="#B98900" />
+              <ScoreBar label="Low Saturation" value={previewItem.score.saturationInverse} color="#B98900" />
+            </div>
+            {previewItem.score.explanation && (
+              <div style={{ padding: '12px 16px', borderRadius: 8, background: '#F0F5FF', border: '1px solid #B4D5FE' }}>
+                <Text as="p" variant="bodySm">{previewItem.score.explanation}</Text>
+              </div>
+            )}
+            {previewItem.score.fitReasons?.length > 0 && (
+              <InlineStack gap="200" wrap>
+                {previewItem.score.fitReasons.map((r: string, i: number) => <Badge key={i} tone="success">{r}</Badge>)}
+              </InlineStack>
+            )}
+            {previewItem.score.concerns?.length > 0 && (
+              <InlineStack gap="200" wrap>
+                {previewItem.score.concerns.map((r: string, i: number) => <Badge key={i} tone="warning">{r}</Badge>)}
+              </InlineStack>
+            )}
+          </>}
+        </BlockStack>
+      </Modal.Section>
+    </Modal>
   );
 
   return (
@@ -220,7 +348,7 @@ export function CandidatesPage() {
           </InlineStack>
         </InlineStack>
 
-        <TextField label="" labelHidden value={searchQuery} onChange={setSearchQuery} placeholder="Search..." autoComplete="off" clearButton onClearButtonClick={() => setSearchQuery('')} />
+        <TextField label="" labelHidden value={searchQuery} onChange={setSearchQuery} placeholder="Search products, categories, sources..." autoComplete="off" clearButton onClearButtonClick={() => setSearchQuery('')} />
 
         {loading && <Card><div style={{ textAlign: 'center', padding: 20 }}><Spinner /></div></Card>}
 
@@ -234,7 +362,7 @@ export function CandidatesPage() {
         {!loading && items.length > 0 && viewMode === 'rows' && (
           <Card>
             <IndexTable resourceName={{ singular: 'product', plural: 'products' }} itemCount={items.length}
-              headings={[{ title: 'Product' }, { title: 'Price' }, { title: 'Margin' }, { title: 'Ship' }, { title: '' }]}
+              headings={[{ title: 'Product' }, { title: 'Price' }, { title: 'Margin' }, { title: 'Ship' }, { title: 'Actions' }]}
               selectable={true} selectedItemsCount={selectedIds.size}
               onSelectionChange={t => { if (t === 'page') { selectedIds.size === items.length ? setSelectedIds(new Set()) : setSelectedIds(new Set(items.map((i: any) => i.id))); } else setSelectedIds(new Set()); }}
             >{rowMarkup}</IndexTable>
@@ -248,35 +376,7 @@ export function CandidatesPage() {
           secondaryActions={[{ content: 'Cancel', onAction: () => setConfirmModal(p => ({ ...p, open: false })) }]}
         ><Modal.Section><Text as="p">{confirmModal.body}</Text></Modal.Section></Modal>
 
-        {selectedCandidate && (
-          <Modal open onClose={() => setSelectedCandidate(null)} title={selectedCandidate.title} size="large"
-            primaryAction={selectedCandidate.status !== 'APPROVED' ? { content: 'Import', onAction: () => handleApprove(selectedCandidate.id), loading: actionLoading === selectedCandidate.id } : undefined}
-            secondaryActions={[{ content: 'Close', onAction: () => setSelectedCandidate(null) }]}
-          ><Modal.Section><BlockStack gap="400">
-            <Text as="p">{selectedCandidate.description}</Text>
-            <InlineStack gap="300">
-              {selectedCandidate.reviewCount && <Badge>{selectedCandidate.reviewRating} ({selectedCandidate.reviewCount.toLocaleString()} reviews)</Badge>}
-              {selectedCandidate.orderVolume && <Badge>{selectedCandidate.orderVolume.toLocaleString()} orders</Badge>}
-              <Badge>{selectedCandidate.sourceName || selectedCandidate.providerType}</Badge>
-            </InlineStack>
-            {selectedCandidate.score && <><Divider /><Text as="h3" variant="headingMd">Score Breakdown</Text>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                <ScoreBar label="Domain Fit" value={selectedCandidate.score.domainFit} color="#5C6AC4" />
-                <ScoreBar label="Store Fit" value={selectedCandidate.score.storeFit} color="#5C6AC4" />
-                <ScoreBar label="Audience" value={selectedCandidate.score.audienceFit} color="#007ACE" />
-                <ScoreBar label="Trend" value={selectedCandidate.score.trendFit} color="#007ACE" />
-                <ScoreBar label="Virality" value={selectedCandidate.score.visualVirality} color="#9C6ADE" />
-                <ScoreBar label="Novelty" value={selectedCandidate.score.novelty} color="#9C6ADE" />
-                <ScoreBar label="Price" value={selectedCandidate.score.priceFit} color="#008060" />
-                <ScoreBar label="Margin" value={selectedCandidate.score.marginFit} color="#008060" />
-                <ScoreBar label="Shipping" value={selectedCandidate.score.shippingFit} color="#B98900" />
-                <ScoreBar label="Saturation" value={selectedCandidate.score.saturationInverse} color="#B98900" />
-              </div>
-              {selectedCandidate.score.explanation && <div style={{ padding: '12px 16px', borderRadius: 8, background: '#F0F5FF', border: '1px solid #B4D5FE' }}>
-                <Text as="p" variant="bodySm">{selectedCandidate.score.explanation}</Text></div>}
-            </>}
-          </BlockStack></Modal.Section></Modal>
-        )}
+        {previewModal}
 
         <div style={{ height: 80 }} />
       </BlockStack>

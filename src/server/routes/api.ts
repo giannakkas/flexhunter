@@ -385,6 +385,7 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
             tags: ['flexhunter', 'testing', `score:${scoreVal}`],
             status: 'ACTIVE',
             variants: [{ price: price.toFixed(2) }],
+            images: (candidate.imageUrls || []).filter((u: string) => u && u.startsWith('http')).map((u: string) => ({ src: u })),
           }
         );
         shopifyProductId = result.id.split('/').pop() || shopifyProductId;
