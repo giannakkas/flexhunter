@@ -37,25 +37,33 @@ export function SelectionsPage() {
   useEffect(() => { get('/candidates?status=APPROVED&sort=score'); }, [get]);
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } }, [msg]);
 
+  const [lastImportedId, setLastImportedId] = useState<string | null>(null);
+
   const items = candidates || [];
 
   const importToShopify = async (id: string) => {
     setBusy(id);
     try {
       const r = await apiFetch<any>(`/candidates/${id}/approve`, { method: 'POST' });
-      setMsg(r.shopifyError ? `Warning: ${r.shopifyError}` : (r.message || 'Imported to Shopify!'));
+      if (r.shopifyError) {
+        setMsg(`Warning: ${r.shopifyError}`);
+      } else {
+        setLastImportedId(id);
+      }
     } catch (e: any) { setMsg(`Error: ${e.message}`); }
     setBusy(null);
     get('/candidates?status=APPROVED&sort=score');
   };
 
   const importAll = async () => {
+    let lastId: string | null = null;
     for (const item of items) {
       if (!item.importedProduct) {
         await apiFetch(`/candidates/${item.id}/approve`, { method: 'POST' }).catch(() => {});
+        lastId = item.id;
       }
     }
-    setMsg(`Imported ${items.length} products to Shopify!`);
+    setMsg(`Imported ${items.length} products to Shopify! Don't forget to optimize SEO.`);
     get('/candidates?status=APPROVED&sort=score');
   };
 
@@ -150,7 +158,14 @@ export function SelectionsPage() {
                       <InlineStack gap="200" align="space-between">
                         <Button size="slim" onClick={() => unselect(item.id)}>Remove</Button>
                         {alreadyImported ? (
-                          <Badge tone="success">Imported ✓</Badge>
+                          <InlineStack gap="200">
+                            <Badge tone="success">In Shopify ✓</Badge>
+                            <button onClick={() => navigate('/seo')} style={{
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              height: 28, padding: '0 12px', fontSize: 11, fontWeight: 700, borderRadius: 6,
+                              border: '1px solid #5C6AC4', background: '#5C6AC4', color: 'white', cursor: 'pointer',
+                            }}>SEO Optimize</button>
+                          </InlineStack>
                         ) : (
                           <button onClick={() => importToShopify(item.id)} disabled={busy === item.id} style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -173,6 +188,39 @@ export function SelectionsPage() {
           primaryAction={{ content: 'Import All', onAction: confirmDlg.fn }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setConfirmDlg(p => ({ ...p, open: false })) }]}
         ><Modal.Section><Text as="p">{confirmDlg.body}</Text></Modal.Section></Modal>
+
+        {/* Post-Import SEO CTA */}
+        <Modal open={!!lastImportedId} onClose={() => setLastImportedId(null)}
+          title="✅ Product Imported Successfully!"
+          primaryAction={{ content: '🚀 Optimize SEO Now', onAction: () => { navigate('/seo'); setLastImportedId(null); } }}
+          secondaryActions={[{ content: 'Later', onAction: () => setLastImportedId(null) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text as="p" variant="bodyMd">
+                Your product is now live in Shopify! But there's one more step that can make a big difference...
+              </Text>
+              <div style={{ padding: '16px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #F0F5FF, #E8F4FF)', border: '1px solid #B4D5FE' }}>
+                <BlockStack gap="200">
+                  <Text as="h3" variant="headingSm">Why SEO Optimization Matters</Text>
+                  <Text as="p" variant="bodySm">Products with optimized titles, descriptions, and meta tags get <strong>2-5x more organic traffic</strong> from Google Shopping and search results. Our AI will:</Text>
+                  <BlockStack gap="100">
+                    {[
+                      '✓ Optimize your product title for search engines',
+                      '✓ Rewrite the description with keywords',
+                      '✓ Generate meta title & description',
+                      '✓ Suggest high-value keyword targets',
+                      '✓ Apply changes directly to Shopify',
+                    ].map((item, i) => (
+                      <Text key={i} as="p" variant="bodySm" fontWeight="semibold">{item}</Text>
+                    ))}
+                  </BlockStack>
+                </BlockStack>
+              </div>
+              <Text as="p" variant="bodySm" tone="subdued">This takes about 10 seconds and can dramatically improve your product's visibility.</Text>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
 
         <div style={{ height: 80 }} />
       </BlockStack>
