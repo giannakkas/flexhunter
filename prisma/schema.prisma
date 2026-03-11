@@ -375,7 +375,7 @@ model ReplacementDecision {
   shop                  Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
 
   currentProductId      String
-  currentProduct        ImportedProduct   @relation(fields: [currentProductId], references: [id])
+  currentProduct        ImportedProduct   @relation(fields: [currentProductId], references: [id], onDelete: Cascade)
   replacementCandidateId String?
 
   // Decision

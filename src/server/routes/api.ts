@@ -652,6 +652,10 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
       }
     }
 
+    // Delete related records that don't cascade
+    await prisma.replacementDecision.deleteMany({ where: { currentProductId: id } }).catch(() => {});
+    await prisma.productPin.deleteMany({ where: { importedProductId: id } }).catch(() => {});
+
     // Reset candidate status back to CANDIDATE so it can be re-evaluated
     if (imported.candidateId) {
       await prisma.candidateProduct.update({
@@ -660,7 +664,7 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
       }).catch(() => {});
     }
 
-    // Delete the imported product record
+    // Delete the imported product record (cascades to ProductPerformance)
     await prisma.importedProduct.delete({ where: { id } });
 
     await prisma.auditLog.create({
