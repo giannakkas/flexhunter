@@ -179,16 +179,16 @@ export function CandidatesPage() {
     }
   };
 
-  const approve = async (id: string) => {
+  const selectProduct = async (id: string) => {
     setBusy(id);
-    try { const r = await apiFetch<any>(`/candidates/${id}/approve`, { method: 'POST' }); setMsg(r.message || 'Imported!'); }
+    try { const r = await apiFetch<any>(`/candidates/${id}/select`, { method: 'POST' }); setMsg(r.message || 'Selected!'); }
     catch (e: any) { setMsg(`Error: ${e.message}`); }
     await get('/candidates?status=CANDIDATE&sort=score');
     setBusy(null); setPreview(null);
   };
   const del = (id: string) => setConfirmDlg({ open: true, title: 'Delete', body: 'Permanently delete this product?', fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); await apiFetch(`/candidates/${id}`, { method: 'DELETE' }); get('/candidates?status=CANDIDATE&sort=score'); } });
   const bulkDel = () => { if (!selIds.size) return; setConfirmDlg({ open: true, title: `Delete ${selIds.size}`, body: `Delete ${selIds.size} products?`, fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); for (const id of selIds) await apiFetch(`/candidates/${id}`, { method: 'DELETE' }).catch(() => {}); setSelIds(new Set()); get('/candidates?status=CANDIDATE&sort=score'); setMsg('Deleted'); } }); };
-  const bulkApprove = async () => { if (!selIds.size) return; for (const id of selIds) await apiFetch(`/candidates/${id}/approve`, { method: 'POST' }).catch(() => {}); setSelIds(new Set()); get('/candidates?status=CANDIDATE&sort=score'); setMsg(`Imported ${selIds.size} products`); };
+  const bulkSelect = async () => { if (!selIds.size) return; for (const id of selIds) await apiFetch(`/candidates/${id}/select`, { method: 'POST' }).catch(() => {}); setSelIds(new Set()); get('/candidates?status=CANDIDATE&sort=score'); setMsg(`Selected ${selIds.size} products`); };
   const resetAll = () => setConfirmDlg({ open: true, title: 'Clear & Re-Research', body: 'Clear all current results and run fresh AI research?', fn: async () => {
     setConfirmDlg(p => ({ ...p, open: false }));
     await apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
@@ -285,11 +285,11 @@ export function CandidatesPage() {
                     <button onClick={() => setScoreItem(item)} style={{ ...BTN, borderColor: '#5C6AC4', background: '#F0F0FF', color: '#5C6AC4' }}>📊 Score</button>
                     {item.sourceUrl && <button onClick={() => window.open(item.sourceUrl, '_blank')} style={{ ...BTN, borderColor: '#C9CCCF', background: '#F6F6F7', color: '#202223' }}>Source</button>}
                   </div>
-                  <button onClick={() => approve(item.id)} disabled={busy === item.id} style={{
+                  <button onClick={() => selectProduct(item.id)} disabled={busy === item.id} style={{
                     ...BTN, borderColor: '#008060', background: '#008060', color: 'white',
                     animation: 'greenGlow 2s ease-in-out infinite', opacity: busy === item.id ? 0.6 : 1,
                     minWidth: 70,
-                  }}>{busy === item.id ? '...' : '✓ Import'}</button>
+                  }}>{busy === item.id ? '...' : '✓ Select'}</button>
                 </div>
               </BlockStack>
             </div>
@@ -336,10 +336,10 @@ export function CandidatesPage() {
             <button onClick={() => setScoreItem(item)} style={{ ...BTN, borderColor: '#5C6AC4', background: '#F0F0FF', color: '#5C6AC4', height: 26, fontSize: 11, padding: '0 8px' }}>Score</button>
             {item.sourceUrl && <button onClick={() => window.open(item.sourceUrl, '_blank')} style={{ ...BTN, borderColor: '#C9CCCF', background: '#F6F6F7', color: '#202223', height: 26, fontSize: 11, padding: '0 8px' }}>Source</button>}
             <button onClick={() => del(item.id)} style={{ ...BTN, borderColor: '#E4E5E7', background: 'white', color: '#D72C0D', height: 26, fontSize: 11, padding: '0 8px' }}>✕</button>
-            <button onClick={() => approve(item.id)} disabled={busy === item.id} style={{
+            <button onClick={() => selectProduct(item.id)} disabled={busy === item.id} style={{
               ...BTN, borderColor: '#008060', background: '#008060', color: 'white', height: 26, fontSize: 11, padding: '0 10px',
               animation: 'greenGlow 2s ease-in-out infinite', opacity: busy === item.id ? 0.6 : 1,
-            }}>{busy === item.id ? '...' : 'Import'}</button>
+            }}>{busy === item.id ? '...' : 'Select'}</button>
           </div>
         </IndexTable.Cell>
       </IndexTable.Row>
@@ -349,7 +349,7 @@ export function CandidatesPage() {
   // ── Preview Modal ──────────────────────
   const previewModal = preview && (
     <Modal open onClose={() => setPreview(null)} title={preview.title} size="large"
-      primaryAction={{ content: 'Import to Store', onAction: () => approve(preview.id), loading: busy === preview.id }}
+      primaryAction={{ content: 'Select Product', onAction: () => selectProduct(preview.id), loading: busy === preview.id }}
       secondaryActions={[
         ...(preview.sourceUrl ? [{ content: 'View on Source', onAction: () => window.open(preview.sourceUrl, '_blank') }] : []),
         { content: 'Close', onAction: () => setPreview(null) },
@@ -495,7 +495,7 @@ export function CandidatesPage() {
           <InlineStack gap="200">
             {selIds.size > 0 && <>
               <Badge>{selIds.size} selected</Badge>
-              <Button size="slim" variant="primary" onClick={bulkApprove}>Import All</Button>
+              <Button size="slim" variant="primary" onClick={bulkSelect}>Select All</Button>
               <Button size="slim" tone="critical" onClick={bulkDel}>Delete</Button>
             </>}
           </InlineStack>

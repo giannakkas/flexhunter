@@ -1,19 +1,26 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-export function AppHeader() {
+export function AppHeader({ candidateCount = 0 }: { candidateCount?: number }) {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isActive = (path: string) => location.pathname === path || (path === '/' && location.pathname === '');
+  const isActive = (path: string) => location.pathname === path;
+
+  const navItems = [
+    { path: '/', label: 'Dashboard' },
+    { path: '/research', label: 'Store DNA' },
+    { path: '/candidates', label: 'Research' },
+    { path: '/selections', label: 'Candidates', count: candidateCount },
+    { path: '/imports', label: 'Imported' },
+  ];
 
   return (
     <div style={{
       background: 'linear-gradient(135deg, #0D1117 0%, #161B22 50%, #1A2332 100%)',
       padding: '10px 20px',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      borderBottom: '1px solid #30363D',
-      minHeight: 52,
+      borderBottom: '1px solid #30363D', minHeight: 52,
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
         <img src="/logo.png" alt="FlexHunter" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'contain' }} />
@@ -23,19 +30,24 @@ export function AppHeader() {
         </div>
       </div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
-        {[
-          { path: '/', label: 'Dashboard' },
-          { path: '/research', label: 'Store DNA' },
-          { path: '/candidates', label: 'Research' },
-          { path: '/imports', label: 'Imported' },
-        ].map(item => (
+        {navItems.map(item => (
           <button key={item.path} onClick={() => navigate(item.path)} style={{
             padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 5,
             border: isActive(item.path) ? '1px solid #58A6FF' : '1px solid #30363D',
             background: isActive(item.path) ? 'rgba(56,139,253,0.15)' : '#21262D',
             color: isActive(item.path) ? '#58A6FF' : '#C9D1D9',
             cursor: 'pointer', transition: 'all 0.15s ease', whiteSpace: 'nowrap',
-          }}>{item.label}</button>
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            {item.label}
+            {item.count !== undefined && item.count > 0 && (
+              <span style={{
+                background: '#F97316', color: 'white', borderRadius: 10,
+                padding: '1px 6px', fontSize: 10, fontWeight: 700,
+                minWidth: 18, textAlign: 'center',
+              }}>{item.count}</span>
+            )}
+          </button>
         ))}
         <button onClick={() => navigate('/seo')} style={{
           padding: '5px 12px', fontSize: 11, fontWeight: 600, borderRadius: 5,

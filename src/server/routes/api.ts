@@ -442,6 +442,48 @@ router.get('/candidates', async (req: Request, res: Response) => {
   }
 });
 
+// Select a candidate (move to Candidates page, no Shopify import)
+router.post('/candidates/:id/select', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { id } = req.params;
+    await prisma.candidateProduct.update({
+      where: { id },
+      data: { status: 'APPROVED' },
+    });
+    res.json({ success: true, message: 'Product selected' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Unselect a candidate (move back to research)
+router.post('/candidates/:id/unselect', async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    await prisma.candidateProduct.update({
+      where: { id },
+      data: { status: 'CANDIDATE' },
+    });
+    res.json({ success: true, message: 'Product removed from candidates' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get count of selected candidates
+router.get('/candidates/selected-count', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const count = await prisma.candidateProduct.count({
+      where: { shopId, status: 'APPROVED', importedProduct: null },
+    });
+    res.json({ success: true, data: { count } });
+  } catch {
+    res.json({ success: true, data: { count: 0 } });
+  }
+});
+
 router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);

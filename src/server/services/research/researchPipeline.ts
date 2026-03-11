@@ -257,7 +257,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     maxCandidatesPerRun: settings.maxCandidatesPerRun,
   };
 
-  const maxCandidates = Math.min(settingsData.maxCandidatesPerRun, 25);
+  const maxCandidates = Math.min(settingsData.maxCandidatesPerRun, 27) || 27;
   console.log(`[Research] Step 2/8: Settings loaded, targeting ${maxCandidates} candidates`);
 
   // Step 3: AI generates targeted search keywords

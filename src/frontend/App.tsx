@@ -12,6 +12,7 @@ import { AppFrame } from './components/common/AppFrame';
 import { DashboardPage } from './pages/DashboardPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { CandidatesPage } from './pages/CandidatesPage';
+import { SelectionsPage } from './pages/SelectionsPage';
 import { ImportsPage } from './pages/ImportsPage';
 import { ReplacementsPage } from './pages/ReplacementsPage';
 import { SettingsPage } from './pages/SettingsPage';
@@ -30,6 +31,7 @@ export default function App() {
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/research" element={<ResearchPage />} />
             <Route path="/candidates" element={<CandidatesPage />} />
+            <Route path="/selections" element={<SelectionsPage />} />
             <Route path="/imports" element={<ImportsPage />} />
             <Route path="/seo" element={<SeoPage />} />
             <Route path="/replacements" element={<ReplacementsPage />} />
