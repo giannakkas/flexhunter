@@ -1,16 +1,15 @@
 // ==============================================
 // AI-Powered Deep Research Pipeline
 // ==============================================
-// Uses AI to generate targeted search queries,
-// fetches real products, then uses AI to evaluate
-// product-market fit with deep scoring.
+// Uses GPT to generate keywords, curate products,
+// and deeply score candidates for the store.
 
 import { v4 as uuid } from 'uuid';
 import prisma from '../../utils/db';
 import { analyzeDomainAndSave } from '../domain/domainEngine';
 import { providerRegistry } from '../providers/providerRegistry';
 import { scoreProduct } from '../scoring/scoringEngine';
-import { aiComplete, aiAnalyzeProductFit } from '../../utils/ai';
+import { aiComplete } from '../../utils/ai';
 import { StoreDNA, NormalizedProduct, MerchantSettingsData, DEFAULT_SCORE_WEIGHTS } from '../../../shared/types';
 
 export interface ResearchResult {
@@ -27,7 +26,7 @@ export interface ResearchResult {
 }
 
 /**
- * Build store DNA from settings
+ * Build a lightweight store DNA from settings only
  */
 async function buildLightDNA(shopId: string): Promise<StoreDNA> {
   const settings = await prisma.merchantSettings.findUniqueOrThrow({ where: { shopId } });
@@ -55,117 +54,166 @@ async function buildLightDNA(shopId: string): Promise<StoreDNA> {
 }
 
 /**
- * Step 1: AI generates targeted search queries based on store profile
+ * Use AI to generate highly targeted search keywords
  */
-async function generateSmartQueries(dna: StoreDNA, settings: MerchantSettingsData): Promise<string[]> {
-  console.log(`[Research] Step 1: AI generating search queries...`);
-
-  try {
-    const prompt = `You are a product research expert for dropshipping e-commerce stores.
+async function aiGenerateKeywords(dna: StoreDNA, settings: MerchantSettingsData): Promise<string[]> {
+  const prompt = `You are an expert e-commerce product researcher. Generate 8-12 highly specific search keywords/phrases to find winning products for this store.
 
 STORE PROFILE:
 - Domain: ${dna.domain}
-- Description: ${dna.description || 'General e-commerce store'}
-- Target audience: ${settings.targetAudience?.join(', ') || 'general consumers'}
-- Preferred categories: ${settings.preferredCategories?.join(', ') || 'trending products'}
+- Description: ${dna.description}
+- Target audience: ${settings.targetAudience?.join(', ') || 'general'}
+- Preferred categories: ${settings.preferredCategories?.join(', ') || 'none'}
 - Price range: $${settings.priceRangeMin || 5} - $${settings.priceRangeMax || 100}
-- Target countries: ${settings.targetCountries?.join(', ') || 'US, worldwide'}
 - Brand vibe: ${dna.brandVibe}
-- Domain signals: ${dna.domainIntent?.categoryBias?.join(', ') || 'none'}
+- Domain keywords: ${dna.domainIntent?.categoryBias?.join(', ') || 'none'}
 
-Generate exactly 10 highly specific product search queries that would find WINNING dropshipping products for this store. 
+RULES:
+- Each keyword should be 2-4 words, specific enough to find products (not generic)
+- Mix of: trending viral products, evergreen sellers, niche opportunities
+- Consider the price range — don't suggest $500 products for a $10-$50 store
+- Think about what the target audience would actually buy
+- Include seasonal/timely trends if relevant
+- Focus on products with high margin potential for dropshipping
 
-Rules:
-- Each query should be 2-5 words, optimized for product search engines
-- Focus on trending, high-demand, high-margin products
-- Mix between: proven winners, emerging trends, seasonal opportunities, viral products
-- Avoid generic queries like "trending products" - be SPECIFIC
-- Consider the store's niche, audience, and price range
-- Include product types that have high social media appeal
-- Think about what would actually sell well in this store
+Return ONLY a JSON array of strings, nothing else.`;
 
-Return ONLY a JSON array of 10 strings. No explanation.`;
-
-    const queries = await aiComplete<string[]>(prompt, {
+  try {
+    const keywords = await aiComplete<string[]>(prompt, {
       temperature: 0.7,
       maxTokens: 500,
-      systemPrompt: 'You are a product research AI. Return only a JSON array of strings.',
+      systemPrompt: 'You are a product research AI. Return only valid JSON arrays.',
     });
-
-    if (Array.isArray(queries) && queries.length > 0) {
-      console.log(`[Research] AI generated ${queries.length} queries: ${queries.join(', ')}`);
-      return queries.slice(0, 10);
+    if (Array.isArray(keywords) && keywords.length > 0) {
+      console.log(`[Research] AI generated ${keywords.length} keywords: ${keywords.join(', ')}`);
+      return keywords;
     }
-  } catch (err: any) {
-    console.warn(`[Research] AI query generation failed: ${err.message}`);
+  } catch (err) {
+    console.warn('[Research] AI keyword generation failed, using fallback:', err);
   }
 
-  // Fallback: use categories + domain signals
-  const fallback = [
+  // Fallback to basic keywords
+  return [
     ...settings.preferredCategories.slice(0, 5),
     ...(dna.domainIntent?.categoryBias?.slice(0, 3) || []),
-  ];
-  if (fallback.length === 0) fallback.push('trending gadgets', 'viral products', 'unique gifts');
-  console.log(`[Research] Using fallback queries: ${fallback.join(', ')}`);
-  return fallback;
+    'trending gadgets', 'viral products',
+  ].filter(Boolean);
 }
 
 /**
- * Step 2: AI evaluates each product for deep fit analysis
+ * Use AI to curate and rank the best products for this store
+ */
+async function aiCurateProducts(
+  products: NormalizedProduct[],
+  dna: StoreDNA,
+  settings: MerchantSettingsData,
+  maxResults: number
+): Promise<{ selectedIndices: number[]; reasoning: string }> {
+  // Only send essential info to AI to save tokens
+  const productSummaries = products.slice(0, 60).map((p, i) => ({
+    idx: i,
+    title: p.title,
+    category: p.category,
+    cost: p.costPrice,
+    price: p.suggestedPrice,
+    rating: p.reviewRating,
+    orders: p.orderVolume,
+    ship: p.shippingDays,
+    source: p.sourceName,
+  }));
+
+  const prompt = `You are a product-market fit expert for dropshipping. From this list of ${productSummaries.length} products, select the BEST ${maxResults} products for this store.
+
+STORE PROFILE:
+- Domain: ${dna.domain}
+- Description: ${dna.description || 'dropshipping store'}
+- Target audience: ${settings.targetAudience?.join(', ') || 'general'}
+- Categories: ${settings.preferredCategories?.join(', ') || 'general'}
+- Price range: $${settings.priceRangeMin || 5} - $${settings.priceRangeMax || 100}
+- Brand vibe: ${dna.brandVibe}
+
+PRODUCTS:
+${JSON.stringify(productSummaries, null, 1)}
+
+SELECTION CRITERIA (ranked by importance):
+1. Audience fit — would the target audience actually want this?
+2. Profit margin — at least 50% margin potential
+3. Trend momentum — is this trending or proven bestseller?
+4. Shipping speed — faster is better, US warehouse preferred
+5. Visual appeal — is it photogenic for social media marketing?
+6. Low competition — avoid oversaturated products
+7. Quality signals — good reviews, high order volume
+8. Price fit — within the store's price range
+
+Return ONLY a JSON object with:
+- "selectedIndices": array of ${maxResults} product index numbers (the "idx" field)
+- "reasoning": 2-3 sentence summary of your selection strategy`;
+
+  try {
+    const result = await aiComplete<{ selectedIndices: number[]; reasoning: string }>(prompt, {
+      temperature: 0.3,
+      maxTokens: 1000,
+      systemPrompt: 'You are a product-market fit analyst. Return only valid JSON.',
+    });
+
+    if (result.selectedIndices && Array.isArray(result.selectedIndices)) {
+      console.log(`[Research] AI curated ${result.selectedIndices.length} products: ${result.reasoning}`);
+      return result;
+    }
+  } catch (err) {
+    console.warn('[Research] AI curation failed, using score-based fallback:', err);
+  }
+
+  // Fallback: just take top N by basic metrics
+  return {
+    selectedIndices: products.slice(0, maxResults).map((_, i) => i),
+    reasoning: 'Fallback: selected by order volume and rating.',
+  };
+}
+
+/**
+ * Use AI to deeply score a single product
  */
 async function aiDeepScore(
   product: NormalizedProduct,
   dna: StoreDNA,
   settings: MerchantSettingsData,
 ): Promise<{
-  aiScore: number;
-  explanation: string;
-  fitReasons: string[];
-  concerns: string[];
-  audienceFit: number;
-  trendFit: number;
-  visualVirality: number;
-  novelty: number;
+  audienceFit: number; trendFit: number; visualVirality: number; novelty: number;
+  explanation: string; fitReasons: string[]; concerns: string[];
 }> {
+  const prompt = `Score this product for the store. Return JSON only.
+
+PRODUCT: "${product.title}" | ${product.category} | $${product.costPrice} cost → $${product.suggestedPrice} sell | ${product.reviewRating} stars | ${product.orderVolume} orders | ${product.sourceName} | Ships in ${product.shippingDays}d from ${product.warehouseCountry}
+DESCRIPTION: ${(product.description || '').slice(0, 200)}
+
+STORE: ${dna.domain} | ${dna.description || 'dropshipping store'} | Audience: ${settings.targetAudience?.join(', ')} | Categories: ${settings.preferredCategories?.join(', ')} | Vibe: ${dna.brandVibe}
+
+Score 0-100:
+- audienceFit: how well does this match the target audience?
+- trendFit: how trending/current is this product?
+- visualVirality: how shareable on social media?
+- novelty: how unique vs common dropship products?
+
+Also provide:
+- explanation: 1-2 sentence fit summary
+- fitReasons: 2-3 specific reasons it fits
+- concerns: 0-2 potential concerns
+
+Return ONLY valid JSON.`;
+
   try {
-    const result = await aiAnalyzeProductFit(
-      {
-        title: product.title,
-        description: product.description || product.title,
-        category: product.category || 'General',
-      },
-      {
-        description: dna.description || settings.storeDescription || '',
-        audience: settings.targetAudience || [],
-        domainKeywords: dna.nicheKeywords || [],
-        vibe: dna.brandVibe || '',
-        categories: settings.preferredCategories || [],
-      }
-    );
-
-    const aiScore = Math.round(
-      (result.audienceFit * 0.3 + result.trendFit * 0.25 +
-       result.visualVirality * 0.25 + result.novelty * 0.2)
-    );
-
+    return await aiComplete(prompt, {
+      model: 'gpt-4o-mini',
+      temperature: 0.3,
+      maxTokens: 400,
+      systemPrompt: 'Product analyst. Return only JSON.',
+    });
+  } catch {
     return {
-      aiScore,
-      explanation: result.explanation || '',
-      fitReasons: result.fitReasons || [],
-      concerns: result.concerns || [],
-      audienceFit: result.audienceFit || 50,
-      trendFit: result.trendFit || 50,
-      visualVirality: result.visualVirality || 50,
-      novelty: result.novelty || 50,
-    };
-  } catch (err: any) {
-    console.warn(`[Research] AI scoring failed for "${product.title}": ${err.message}`);
-    return {
-      aiScore: 50,
-      explanation: 'AI scoring unavailable',
-      fitReasons: [],
-      concerns: [],
-      audienceFit: 50, trendFit: 50, visualVirality: 50, novelty: 50,
+      audienceFit: 60, trendFit: 55, visualVirality: 50, novelty: 45,
+      explanation: 'AI scoring unavailable, using algorithmic estimates.',
+      fitReasons: ['Available from supplier'], concerns: ['AI scoring failed'],
     };
   }
 }
@@ -175,25 +223,14 @@ async function aiDeepScore(
  */
 export async function runResearchPipeline(shopId: string): Promise<ResearchResult> {
   const batchId = uuid();
-  console.log(`[Research] ═══ Starting AI Deep Research ═══ batch ${batchId}`);
-  const startTime = Date.now();
+  console.log(`[Research] ====== Starting AI-powered deep research ======`);
+  console.log(`[Research] Shop: ${shopId}, Batch: ${batchId}`);
 
-  // ── Step 0: Clear old non-imported candidates ──
-  const oldCandidates = await prisma.candidateProduct.findMany({
-    where: { shopId, status: { in: ['CANDIDATE', 'REJECTED'] }, importedProduct: { is: null } },
-    select: { id: true },
-  });
-  if (oldCandidates.length > 0) {
-    const ids = oldCandidates.map(c => c.id);
-    await prisma.candidateScore.deleteMany({ where: { candidateId: { in: ids } } });
-    await prisma.candidateProduct.deleteMany({ where: { id: { in: ids } } });
-  }
-  console.log(`[Research] Cleared ${oldCandidates.length} old candidates`);
-
-  // ── Step 1: Build Store DNA ──
+  // Step 1: Build store DNA
   const dna = await buildLightDNA(shopId);
-  console.log(`[Research] DNA built for ${dna.domain}`);
+  console.log(`[Research] Step 1/8: DNA built for ${dna.domain}`);
 
+  // Step 2: Load settings
   const settings = await prisma.merchantSettings.findUniqueOrThrow({ where: { shopId } });
   const settingsData: MerchantSettingsData = {
     storeDescription: settings.storeDescription,
@@ -209,28 +246,30 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     maxCandidatesPerRun: settings.maxCandidatesPerRun,
   };
 
-  // ── Step 2: AI generates smart search queries ──
-  const queries = await generateSmartQueries(dna, settingsData);
+  const maxCandidates = Math.min(settingsData.maxCandidatesPerRun, 25);
+  console.log(`[Research] Step 2/8: Settings loaded, targeting ${maxCandidates} candidates`);
 
-  // ── Step 3: Fetch products from ALL providers with AI queries ──
-  console.log(`[Research] Step 3: Fetching from providers...`);
+  // Step 3: AI generates targeted search keywords
+  const keywords = await aiGenerateKeywords(dna, settingsData);
+  console.log(`[Research] Step 3/8: AI generated ${keywords.length} search keywords`);
+
+  // Step 4: Fetch from ALL providers using AI keywords
   const rawProducts: NormalizedProduct[] = [];
-
-  for (const kw of queries) {
+  for (const kw of keywords.slice(0, 8)) {
     try {
       const results = await providerRegistry.searchAll({
         keywords: [kw],
         minPrice: settingsData.priceRangeMin ?? undefined,
         maxPrice: settingsData.priceRangeMax ?? undefined,
-        limit: 10,
+        limit: 15,
       });
       rawProducts.push(...results);
     } catch (err) {
-      console.warn(`[Research] Search failed for "${kw}":`, err);
+      console.warn(`[Research] Provider search failed for "${kw}":`, err);
     }
   }
 
-  // Deduplicate by provider+id
+  // Deduplicate by provider+productId
   const seen = new Set<string>();
   const unique = rawProducts.filter((p) => {
     const key = `${p.providerType}-${p.providerProductId}`;
@@ -238,93 +277,87 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     seen.add(key);
     return true;
   });
-  console.log(`[Research] Fetched ${rawProducts.length} raw, ${unique.length} unique products`);
+  console.log(`[Research] Step 4/8: Fetched ${rawProducts.length} products, ${unique.length} unique`);
 
-  // Filter banned categories
+  // Step 5: Filter banned categories
   const filtered = unique.filter((p) => {
     const cat = (p.category || '').toLowerCase();
-    return !settingsData.bannedCategories.some((b) => cat.includes(b.toLowerCase()));
+    const title = (p.title || '').toLowerCase();
+    return !settingsData.bannedCategories.some((b) => {
+      const bl = b.toLowerCase();
+      return cat.includes(bl) || title.includes(bl);
+    });
   });
+  console.log(`[Research] Step 5/8: ${filtered.length} after banning`);
 
-  // ── Step 4: Initial code-based scoring (fast) ──
-  console.log(`[Research] Step 4: Code-based scoring ${filtered.length} products...`);
-  const preScored: (NormalizedProduct & { score: any })[] = [];
-  for (const product of filtered) {
+  // Step 6: AI curates the best products
+  const curation = await aiCurateProducts(filtered, dna, settingsData, maxCandidates);
+  const curatedProducts = curation.selectedIndices
+    .filter(i => i >= 0 && i < filtered.length)
+    .map(i => filtered[i]);
+  console.log(`[Research] Step 6/8: AI curated ${curatedProducts.length} products`);
+
+  // Step 7: Deep score each curated product (AI + algorithmic)
+  const scored: (NormalizedProduct & { score: any; aiScore: any })[] = [];
+  for (const product of curatedProducts) {
     try {
-      const score = await scoreProduct(product, dna, settingsData, DEFAULT_SCORE_WEIGHTS, false);
-      preScored.push({ ...product, score });
+      // Algorithmic scoring
+      const algoScore = await scoreProduct(product, dna, settingsData, DEFAULT_SCORE_WEIGHTS, false);
+
+      // AI deep scoring
+      const aiScore = await aiDeepScore(product, dna, settingsData);
+
+      // Blend: 40% AI, 60% algorithmic
+      const blended = {
+        ...algoScore,
+        audienceFit: Math.round(algoScore.audienceFit * 0.5 + (aiScore.audienceFit || 60) * 0.5),
+        trendFit: Math.round(algoScore.trendFit * 0.5 + (aiScore.trendFit || 55) * 0.5),
+        visualVirality: Math.round(algoScore.visualVirality * 0.4 + (aiScore.visualVirality || 50) * 0.6),
+        novelty: Math.round(algoScore.novelty * 0.4 + (aiScore.novelty || 45) * 0.6),
+        explanation: aiScore.explanation || algoScore.explanation,
+        fitReasons: aiScore.fitReasons || algoScore.fitReasons,
+        concerns: aiScore.concerns || algoScore.concerns,
+      };
+
+      // Recalculate final score with blended dimensions
+      const w = DEFAULT_SCORE_WEIGHTS;
+      blended.finalScore = Math.round(
+        blended.domainFit * w.domainFit +
+        blended.storeFit * w.storeFit +
+        blended.audienceFit * w.audienceFit +
+        blended.trendFit * w.trendFit +
+        blended.visualVirality * w.visualVirality +
+        blended.novelty * w.novelty +
+        blended.priceFit * w.priceFit +
+        blended.marginFit * w.marginFit +
+        blended.shippingFit * w.shippingFit +
+        blended.saturationInverse * w.saturationInverse +
+        blended.refundRiskInverse * w.refundRiskInverse
+      );
+
+      scored.push({ ...product, score: blended, aiScore });
     } catch (err) {
-      console.warn(`[Research] Pre-scoring failed for "${product.title}"`);
+      console.warn(`[Research] Scoring failed for "${product.title}":`, err);
     }
   }
 
-  // Sort by pre-score and take top candidates for AI deep analysis
-  preScored.sort((a, b) => b.score.finalScore - a.score.finalScore);
-  const topForAI = preScored.slice(0, Math.min(25, settingsData.maxCandidatesPerRun + 5));
-  console.log(`[Research] Pre-scored ${preScored.length}, sending top ${topForAI.length} to AI`);
+  // Sort by blended score
+  scored.sort((a, b) => b.score.finalScore - a.score.finalScore);
+  console.log(`[Research] Step 7/8: Deep scored ${scored.length} products`);
 
-  // ── Step 5: AI Deep Analysis on top candidates ──
-  console.log(`[Research] Step 5: AI deep-analyzing ${topForAI.length} products...`);
-  const deepScored: (NormalizedProduct & { score: any; aiData: any })[] = [];
+  // Step 8: Clear old non-imported candidates and save new ones
+  const deletedOld = await prisma.candidateProduct.deleteMany({
+    where: {
+      shopId,
+      status: { in: ['CANDIDATE', 'REJECTED'] },
+      importedProduct: null,
+    },
+  });
+  console.log(`[Research] Step 8/8: Cleared ${deletedOld.count} old candidates, saving ${scored.length} new`);
 
-  for (const product of topForAI) {
-    const aiData = await aiDeepScore(product, dna, settingsData);
-
-    // Blend AI scores with code scores (AI gets 40% weight)
-    const blended = { ...product.score };
-    blended.audienceFit = blended.audienceFit * 0.6 + aiData.audienceFit * 0.4;
-    blended.trendFit = blended.trendFit * 0.6 + aiData.trendFit * 0.4;
-    blended.visualVirality = blended.visualVirality * 0.6 + aiData.visualVirality * 0.4;
-    blended.novelty = blended.novelty * 0.6 + aiData.novelty * 0.4;
-
-    // Recalculate final score with blended dimensions
-    const w = DEFAULT_SCORE_WEIGHTS;
-    blended.finalScore = Math.round(
-      blended.domainFit * w.domainFit +
-      blended.storeFit * w.storeFit +
-      blended.audienceFit * w.audienceFit +
-      blended.trendFit * w.trendFit +
-      blended.visualVirality * w.visualVirality +
-      blended.novelty * w.novelty +
-      blended.priceFit * w.priceFit +
-      blended.marginFit * w.marginFit +
-      blended.shippingFit * w.shippingFit +
-      blended.saturationInverse * w.saturationInverse +
-      blended.refundRiskInverse * w.refundRiskInverse
-    );
-
-    // Use AI explanation and fit data
-    blended.explanation = aiData.explanation || blended.explanation;
-    blended.fitReasons = aiData.fitReasons.length > 0 ? aiData.fitReasons : blended.fitReasons;
-    blended.concerns = aiData.concerns.length > 0 ? aiData.concerns : blended.concerns;
-    blended.confidence = Math.min(100, (blended.confidence || 60) + 15); // AI boost
-
-    deepScored.push({ ...product, score: blended, aiData });
-  }
-
-  // Final sort by AI-enhanced score
-  deepScored.sort((a, b) => b.score.finalScore - a.score.finalScore);
-  const topN = deepScored.slice(0, settingsData.maxCandidatesPerRun);
-  console.log(`[Research] AI analysis complete. Saving top ${topN.length}`);
-
-  // ── Step 6: Save to database ──
   let savedCount = 0;
-  for (const product of topN) {
+  for (const product of scored) {
     try {
-      const existing = await prisma.candidateProduct.findFirst({
-        where: { shopId, providerType: product.providerType, providerProductId: product.providerProductId },
-      });
-
-      if (existing) {
-        // Update score only
-        await prisma.candidateScore.upsert({
-          where: { candidateId: existing.id },
-          create: { candidateId: existing.id, ...scoreFields(product.score) },
-          update: scoreFields(product.score),
-        });
-        continue;
-      }
-
       const candidate = await prisma.candidateProduct.create({
         data: {
           shopId,
@@ -356,20 +389,32 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
       });
 
       await prisma.candidateScore.create({
-        data: { candidateId: candidate.id, ...scoreFields(product.score) },
+        data: {
+          candidateId: candidate.id,
+          domainFit: product.score.domainFit,
+          storeFit: product.score.storeFit,
+          audienceFit: product.score.audienceFit,
+          trendFit: product.score.trendFit,
+          visualVirality: product.score.visualVirality,
+          novelty: product.score.novelty,
+          priceFit: product.score.priceFit,
+          marginFit: product.score.marginFit,
+          shippingFit: product.score.shippingFit,
+          saturationInverse: product.score.saturationInverse,
+          refundRiskInverse: product.score.refundRiskInverse,
+          finalScore: product.score.finalScore,
+          confidence: product.score.confidence,
+          explanation: product.score.explanation,
+          fitReasons: product.score.fitReasons,
+          concerns: product.score.concerns,
+          scoredAt: new Date(),
+        },
       });
 
       savedCount++;
     } catch (err) {
-      console.warn(`[Research] Failed to save "${product.title}"`);
+      console.warn(`[Research] Failed to save "${product.title}":`, err);
     }
-  }
-
-  // ── Step 7: Ensure minimum time for thorough feel ──
-  const elapsed = Date.now() - startTime;
-  const minTime = 10000; // 10 seconds minimum
-  if (elapsed < minTime) {
-    await new Promise(r => setTimeout(r, minTime - elapsed));
   }
 
   // Audit log
@@ -381,49 +426,27 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
         batchId,
         totalFetched: rawProducts.length,
         unique: unique.length,
-        aiAnalyzed: topForAI.length,
+        aiCurated: curatedProducts.length,
+        scored: scored.length,
         saved: savedCount,
-        queries,
+        keywords,
+        aiReasoning: curation.reasoning,
       } as any,
     },
   });
 
-  const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`[Research] ═══ Complete! ${savedCount} candidates saved in ${totalTime}s ═══`);
+  console.log(`[Research] ====== Complete! Saved ${savedCount} AI-curated candidates ======`);
 
   return {
     batchId,
     totalFetched: rawProducts.length,
-    totalScored: deepScored.length,
+    totalScored: scored.length,
     totalSaved: savedCount,
-    topCandidates: topN.slice(0, 5).map((p) => ({
+    topCandidates: scored.slice(0, 5).map((p) => ({
       title: p.title,
       category: p.category,
       finalScore: p.score.finalScore,
       explanation: p.score.explanation,
     })),
-  };
-}
-
-// Helper to extract score fields for Prisma
-function scoreFields(score: any) {
-  return {
-    domainFit: score.domainFit,
-    storeFit: score.storeFit,
-    audienceFit: score.audienceFit,
-    trendFit: score.trendFit,
-    visualVirality: score.visualVirality,
-    novelty: score.novelty,
-    priceFit: score.priceFit,
-    marginFit: score.marginFit,
-    shippingFit: score.shippingFit,
-    saturationInverse: score.saturationInverse,
-    refundRiskInverse: score.refundRiskInverse,
-    finalScore: score.finalScore,
-    confidence: score.confidence,
-    explanation: score.explanation,
-    fitReasons: score.fitReasons,
-    concerns: score.concerns,
-    scoredAt: new Date(),
   };
 }

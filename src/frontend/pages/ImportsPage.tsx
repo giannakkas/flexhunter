@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
-  IndexTable, EmptyState, ProgressBar, Banner, Thumbnail,
+  IndexTable, EmptyState, ProgressBar, Banner, Thumbnail, Modal,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { useApi, apiFetch } from '../hooks/useApi';
@@ -22,6 +22,9 @@ export function ImportsPage() {
   const { post } = useApi();
   const [shopStatus, setShopStatus] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     get('/imports');
@@ -30,9 +33,17 @@ export function ImportsPage() {
 
   const handlePin = async (id: string) => { await post(`/imports/${id}/pin`, { reason: 'Pinned' }); get('/imports'); };
   const handleUnpin = async (id: string) => { await post(`/imports/${id}/unpin`); get('/imports'); };
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this product? It will also be removed from Shopify.')) return;
-    try { await apiFetch(`/imports/${id}`, { method: 'DELETE' }); } catch {}
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await apiFetch(`/imports/${deleteTarget}`, { method: 'DELETE' });
+      setMessage('Product deleted from FlexHunter and Shopify.');
+    } catch (e: any) {
+      setMessage(`Delete failed: ${e.message}`);
+    }
+    setDeleting(false);
+    setDeleteTarget(null);
     get('/imports');
   };
 
@@ -82,7 +93,7 @@ export function ImportsPage() {
               ? <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
               : <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
             }
-            <Button size="slim" tone="critical" variant="plain" onClick={() => handleDelete(item.id)}>Delete</Button>
+            <Button size="slim" tone="critical" variant="plain" onClick={() => setDeleteTarget(item.id)}>Delete</Button>
           </InlineStack>
         </IndexTable.Cell>
       </IndexTable.Row>
@@ -153,6 +164,21 @@ export function ImportsPage() {
               {rowMarkup}
             </IndexTable>
           </Card>
+        )}
+
+        <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Imported Product"
+          primaryAction={{ content: 'Delete', onAction: handleDelete, destructive: true, loading: deleting }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setDeleteTarget(null) }]}
+        >
+          <Modal.Section>
+            <Text as="p">This will delete the product from FlexHunter and remove it from your Shopify store. This cannot be undone.</Text>
+          </Modal.Section>
+        </Modal>
+
+        {message && (
+          <Banner tone={message.includes('failed') ? 'critical' : 'success'} onDismiss={() => setMessage(null)}>
+            <Text as="p">{message}</Text>
+          </Banner>
         )}
 
         <div style={{ height: 80 }} />
