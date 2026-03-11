@@ -57,7 +57,7 @@ async function buildLightDNA(shopId: string): Promise<StoreDNA> {
  * Use AI to generate highly targeted search keywords
  */
 async function aiGenerateKeywords(dna: StoreDNA, settings: MerchantSettingsData): Promise<string[]> {
-  const prompt = `You are an expert e-commerce niche researcher. Generate 8-12 search keywords to find products for this store.
+  const prompt = `You are an expert e-commerce niche researcher. Generate exactly 15 search keywords to find DIFFERENT products for this store.
 
 STORE PROFILE:
 - Domain: ${dna.domain}
@@ -69,26 +69,25 @@ STORE PROFILE:
 - Niche keywords: ${dna.nicheKeywords?.join(', ') || 'none'}
 
 CRITICAL RULES:
-- ALL keywords MUST belong to ONE cohesive store niche/theme
-- A customer browsing this store should see products that NATURALLY go together
-- Think: "What kind of store is this?" then ONLY suggest products for THAT type of store
-- For example: if it's a gaming store, ALL keywords should be gaming-related
-- If it's a home decor store, ALL keywords should be home decor
-- If categories are broad/unclear, pick the STRONGEST niche signal and focus on that
-- NEVER mix unrelated categories (no gaming keyboards + bicycle lights + leather bags)
-- Each keyword: 2-4 words, specific enough for product search
-- Focus on the price range — don't suggest expensive items for a budget store
+- ALL 15 keywords MUST belong to ONE cohesive store niche
+- But each keyword should target a DIFFERENT product type within that niche
+- Example for a "gaming store": "RGB mouse pad", "gaming headset stand", "controller grip", "desk cable organizer", "monitor light bar", etc — all gaming, but each finds DIFFERENT products
+- Example for "home decor": "ceramic vase minimal", "floating wall shelf", "LED candle set", "macrame plant hanger", "minimalist clock wall" — all home decor, all different
+- MAXIMIZE VARIETY within the single niche — don't repeat similar searches
+- Each keyword: 2-4 words, specific product type
+- Focus on the $${settings.priceRangeMin || 5} - $${settings.priceRangeMax || 100} range
 
-Return ONLY a JSON array of strings.`;
+Return ONLY a JSON array of exactly 15 strings.`;
 
   try {
     const keywords = await aiComplete<string[]>(prompt, {
-      temperature: 0.5,
-      maxTokens: 500,
-      systemPrompt: 'You are a niche product researcher. Return only valid JSON arrays. All keywords must be for ONE cohesive store theme.',
+      model: 'gpt-4o-mini',
+      temperature: 0.6,
+      maxTokens: 600,
+      systemPrompt: 'Niche product researcher. Return only a JSON array of 15 strings. Each string targets a different product within one niche.',
     });
     if (Array.isArray(keywords) && keywords.length > 0) {
-      console.log(`[Research] AI generated ${keywords.length} niche-focused keywords: ${keywords.join(', ')}`);
+      console.log(`[Research] AI generated ${keywords.length} diverse niche keywords: ${keywords.join(', ')}`);
       return keywords;
     }
   } catch (err) {
@@ -123,7 +122,7 @@ async function aiCurateProducts(
     source: p.sourceName,
   }));
 
-  const prompt = `You are a product curator for a FOCUSED niche dropshipping store. From ${productSummaries.length} products, select the BEST ${maxResults} that ALL belong together in ONE cohesive store.
+  const prompt = `You are a product curator for a FOCUSED niche dropshipping store. From ${productSummaries.length} products, select EXACTLY ${maxResults} products that all belong in ONE cohesive store.
 
 STORE PROFILE:
 - Domain: ${dna.domain}
@@ -136,25 +135,20 @@ STORE PROFILE:
 PRODUCTS:
 ${JSON.stringify(productSummaries, null, 1)}
 
-CRITICAL — NICHE COHERENCE:
-- ALL selected products MUST look like they belong in the SAME store
-- A customer should think "this store sells [one type of thing]"
-- REJECT products that don't fit the store's main theme even if they score well individually
-- Better to return 10 coherent products than 20 random ones
-- If products are mixed categories, pick the dominant niche and ONLY select from that niche
-
-OTHER CRITERIA:
-1. Profit margin — at least 50% markup potential
-2. Quality signals — good reviews, order volume
-3. Visual appeal — photogenic for social media
-4. Price fit — within the store's range
+RULES:
+- You MUST return EXACTLY ${maxResults} products — no fewer
+- ALL products must fit the store's niche and look like they belong together
+- Within the niche, maximize VARIETY — different product types, not 5 of the same thing
+- Prioritize: good reviews, high orders, reasonable shipping, good margin
+- If some products are borderline relevant, include them if you need to reach ${maxResults}
 
 Return ONLY a JSON object with:
-- "selectedIndices": array of product idx numbers (ONLY coherent products)
-- "reasoning": what niche you focused on and why`;
+- "selectedIndices": array of EXACTLY ${maxResults} product idx numbers
+- "reasoning": what niche theme you chose`;
 
   try {
     const result = await aiComplete<{ selectedIndices: number[]; reasoning: string }>(prompt, {
+      model: 'gpt-4o-mini',
       temperature: 0.3,
       maxTokens: 1000,
       systemPrompt: 'You are a product-market fit analyst. Return only valid JSON.',
@@ -264,31 +258,48 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const keywords = await aiGenerateKeywords(dna, settingsData);
   console.log(`[Research] Step 3/8: AI generated ${keywords.length} search keywords`);
 
-  // Step 4: Fetch from ALL providers using AI keywords
+  // Step 4: Fetch from ALL providers using ALL keywords (more = better dedup pool)
   const rawProducts: NormalizedProduct[] = [];
-  for (const kw of keywords.slice(0, 8)) {
+  for (const kw of keywords) {
     try {
       const results = await providerRegistry.searchAll({
         keywords: [kw],
         minPrice: settingsData.priceRangeMin ?? undefined,
         maxPrice: settingsData.priceRangeMax ?? undefined,
-        limit: 15,
+        limit: 20,
       });
       rawProducts.push(...results);
+      console.log(`[Research]   keyword "${kw}": ${results.length} products`);
     } catch (err) {
       console.warn(`[Research] Provider search failed for "${kw}":`, err);
     }
   }
 
-  // Deduplicate by provider+productId
+  // Search page 2 for first 5 keywords to get more variety
+  for (const kw of keywords.slice(0, 5)) {
+    try {
+      const results = await providerRegistry.searchAll({
+        keywords: [kw], limit: 20, page: 2,
+      });
+      rawProducts.push(...results);
+      if (results.length > 0) console.log(`[Research]   keyword "${kw}" page 2: ${results.length} products`);
+    } catch {}
+  }
+
+  // Deduplicate by provider+productId AND by similar title
   const seen = new Set<string>();
+  const seenTitles = new Set<string>();
   const unique = rawProducts.filter((p) => {
     const key = `${p.providerType}-${p.providerProductId}`;
     if (seen.has(key)) return false;
     seen.add(key);
+    // Also dedup by normalized title (first 40 chars lowercase)
+    const titleKey = (p.title || '').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40);
+    if (titleKey.length > 10 && seenTitles.has(titleKey)) return false;
+    seenTitles.add(titleKey);
     return true;
   });
-  console.log(`[Research] Step 4/8: Fetched ${rawProducts.length} products, ${unique.length} unique`);
+  console.log(`[Research] Step 4/8: Fetched ${rawProducts.length} raw, ${unique.length} unique products`);
 
   if (unique.length === 0) {
     throw new Error(`No products found from ${availableProviders.map(p => p.name).join(', ')}. Try broadening your categories or price range in Store DNA.`);
@@ -310,11 +321,22 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const curatedProducts = curation.selectedIndices
     .filter(i => i >= 0 && i < filtered.length)
     .map(i => filtered[i]);
-  // If AI curation returned nothing, take top products by review/order volume
-  const finalCurated = curatedProducts.length > 0
-    ? curatedProducts
-    : filtered.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
-  console.log(`[Research] Step 6/8: AI curated ${finalCurated.length} products (from ${filtered.length} filtered)`);
+  // If AI curation returned too few, fill remaining from filtered pool
+  let finalCurated: NormalizedProduct[];
+  if (curatedProducts.length >= maxCandidates) {
+    finalCurated = curatedProducts.slice(0, maxCandidates);
+  } else if (curatedProducts.length > 0) {
+    // Fill gaps with highest-volume products not already selected
+    const selectedIds = new Set(curatedProducts.map(p => `${p.providerType}-${p.providerProductId}`));
+    const extras = filtered
+      .filter(p => !selectedIds.has(`${p.providerType}-${p.providerProductId}`))
+      .sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0))
+      .slice(0, maxCandidates - curatedProducts.length);
+    finalCurated = [...curatedProducts, ...extras];
+  } else {
+    finalCurated = filtered.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
+  }
+  console.log(`[Research] Step 6/8: ${finalCurated.length} products curated (AI: ${curatedProducts.length}, filled: ${finalCurated.length - curatedProducts.length})`);
 
   // Step 7: Deep score each curated product (AI + algorithmic)
   const scored: (NormalizedProduct & { score: any; aiScore: any })[] = [];
