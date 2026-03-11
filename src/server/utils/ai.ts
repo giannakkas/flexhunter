@@ -1,7 +1,10 @@
-import OpenAI from 'openai';
-import { config } from '../config';
+// ==============================================
+// AI Engine — Google Gemini 2.0 Flash
+// ==============================================
+// Fast, accurate, essentially free for this volume.
+// Falls back to OpenAI if GEMINI_API_KEY not set.
 
-const openai = new OpenAI({ apiKey: config.ai.openaiKey });
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
 export interface AICompletionOptions {
   model?: string;
@@ -11,42 +14,100 @@ export interface AICompletionOptions {
 }
 
 /**
- * Generic AI completion - returns parsed JSON or raw text
+ * Call Gemini 2.0 Flash API directly via REST
  */
-export async function aiComplete<T = string>(
-  prompt: string,
-  options: AICompletionOptions = {}
-): Promise<T> {
-  const {
-    model = config.ai.model,
-    temperature = 0.4,
-    maxTokens = 4096,
-    systemPrompt,
-  } = options;
+async function geminiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
-  const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+  const { temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
 
+  const contents: any[] = [];
   if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt });
+    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+    contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
   }
-  messages.push({ role: 'user', content: prompt });
+  contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-  const response = await openai.chat.completions.create({
-    model,
-    temperature,
-    max_tokens: maxTokens,
-    messages,
+  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        temperature,
+        maxOutputTokens: maxTokens,
+        responseMimeType: 'application/json',
+      },
+    }),
   });
 
-  const content = response.choices[0]?.message?.content || '';
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
+  }
 
-  // Try to parse as JSON
+  const data = await res.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+  // Parse JSON
+  try {
+    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    return JSON.parse(cleaned) as T;
+  } catch {
+    return text as T;
+  }
+}
+
+/**
+ * OpenAI fallback
+ */
+async function openaiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) throw new Error('No AI API key configured (set GEMINI_API_KEY or OPENAI_API_KEY)');
+
+  const { model = 'gpt-4o-mini', temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
+
+  const messages: any[] = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`OpenAI API error ${res.status}: ${err.slice(0, 200)}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content || '';
+
   try {
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     return JSON.parse(cleaned) as T;
   } catch {
     return content as T;
   }
+}
+
+/**
+ * Main AI completion — uses Gemini if available, falls back to OpenAI
+ */
+export async function aiComplete<T = string>(
+  prompt: string,
+  options: AICompletionOptions = {}
+): Promise<T> {
+  if (process.env.GEMINI_API_KEY) {
+    return geminiComplete<T>(prompt, options);
+  }
+  return openaiComplete<T>(prompt, options);
 }
 
 /**
@@ -84,45 +145,23 @@ Domain keywords: ${storeContext.domainKeywords.join(', ')}
 Brand vibe: ${storeContext.vibe}
 Store categories: ${storeContext.categories.join(', ')}
 
-Score each dimension 0-100:
-- audienceFit: how well does this product match the target audience?
-- visualVirality: how shareable/photogenic is this product on social media?
-- trendFit: how trendy/current is this product?
-- novelty: how unique/novel is this vs common products?
-
-Also provide:
-- explanation: 1-2 sentence summary of why it fits or doesn't
-- fitReasons: array of 2-4 specific reasons it fits
-- concerns: array of 0-3 potential concerns
-
-Return ONLY valid JSON with these exact keys.`;
+Score each 0-100: audienceFit, visualVirality, trendFit, novelty
+Also: explanation (1-2 sentences), fitReasons (array), concerns (array)
+Return ONLY valid JSON.`;
 
   return aiComplete(prompt, {
-    model: config.ai.scoringModel,
     temperature: 0.3,
-    systemPrompt: 'You are a product-market fit analyst for e-commerce. Return only valid JSON.',
+    systemPrompt: 'Product-market fit analyst. Return only valid JSON.',
   });
 }
 
-/**
- * AI-powered explanation generation for recommendations
- */
 export async function aiGenerateExplanation(
   product: { title: string; category: string; price: number },
   scores: Record<string, number>,
   storeDNA: { vibe: string; audience: string[]; domain: string }
 ): Promise<string> {
-  const prompt = `Write a concise 2-3 sentence explanation of why "${product.title}" (${product.category}, $${product.price}) is recommended for a ${storeDNA.vibe} store at ${storeDNA.domain} targeting ${storeDNA.audience.join(', ')}.
+  const prompt = `Write 2-3 sentences: why "${product.title}" (${product.category}, $${product.price}) fits a ${storeDNA.vibe} store targeting ${storeDNA.audience.join(', ')}.
+Scores: ${Object.entries(scores).map(([k, v]) => `${k}=${v}`).join(', ')}. Be specific.`;
 
-Key scores: ${Object.entries(scores).map(([k, v]) => `${k}=${v}`).join(', ')}
-
-Be specific about fit reasons. No fluff.`;
-
-  return aiComplete<string>(prompt, {
-    model: config.ai.scoringModel,
-    temperature: 0.5,
-    maxTokens: 200,
-  });
+  return aiComplete<string>(prompt, { temperature: 0.5, maxTokens: 200 });
 }
-
-export default openai;

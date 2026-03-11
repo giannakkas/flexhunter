@@ -289,7 +289,6 @@ Return ONLY JSON:
 }`;
 
     const result = await aiComplete(prompt, {
-      model: 'gpt-4o-mini',
       temperature: 0.5,
       maxTokens: 300,
       systemPrompt: 'Help the user describe their e-commerce store precisely. Return only JSON.',

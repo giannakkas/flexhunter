@@ -81,7 +81,6 @@ Return ONLY a JSON array of exactly 15 strings.`;
 
   try {
     const keywords = await aiComplete<string[]>(prompt, {
-      model: 'gpt-4o-mini',
       temperature: 0.6,
       maxTokens: 600,
       systemPrompt: 'Niche product researcher. Return only a JSON array of 15 strings. Each string targets a different product within one niche.',
@@ -145,7 +144,6 @@ Return ONLY JSON:
 
   try {
     const result = await aiComplete<{ selectedIndices: number[]; reasoning: string }>(prompt, {
-      model: 'gpt-4o-mini',
       temperature: 0.2,
       maxTokens: 1000,
       systemPrompt: `You are a strict product relevance filter for a store that sells: "${dna.description}". REJECT anything not directly related. Return only valid JSON.`,
@@ -199,7 +197,6 @@ Return ONLY valid JSON.`;
 
   try {
     return await aiComplete(prompt, {
-      model: 'gpt-4o-mini',
       temperature: 0.2,
       maxTokens: 400,
       systemPrompt: `Product relevance analyst for a "${dna.description}" store. Be STRICT with relevance scoring. Return only JSON.`,
