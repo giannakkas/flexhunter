@@ -189,7 +189,12 @@ export function CandidatesPage() {
   const del = (id: string) => setConfirmDlg({ open: true, title: 'Delete', body: 'Permanently delete this product?', fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); await apiFetch(`/candidates/${id}`, { method: 'DELETE' }); get('/candidates?status=CANDIDATE&sort=score'); } });
   const bulkDel = () => { if (!selIds.size) return; setConfirmDlg({ open: true, title: `Delete ${selIds.size}`, body: `Delete ${selIds.size} products?`, fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); for (const id of selIds) await apiFetch(`/candidates/${id}`, { method: 'DELETE' }).catch(() => {}); setSelIds(new Set()); get('/candidates?status=CANDIDATE&sort=score'); setMsg('Deleted'); } }); };
   const bulkApprove = async () => { if (!selIds.size) return; for (const id of selIds) await apiFetch(`/candidates/${id}/approve`, { method: 'POST' }).catch(() => {}); setSelIds(new Set()); get('/candidates?status=CANDIDATE&sort=score'); setMsg(`Imported ${selIds.size} products`); };
-  const resetAll = () => setConfirmDlg({ open: true, title: 'Clear All', body: 'Delete ALL research results?', fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); await apiFetch('/candidates/reset', { method: 'POST' }); get('/candidates?status=CANDIDATE&sort=score'); setMsg('Cleared.'); } });
+  const resetAll = () => setConfirmDlg({ open: true, title: 'Clear & Re-Research', body: 'Clear all current results and run fresh AI research?', fn: async () => {
+    setConfirmDlg(p => ({ ...p, open: false }));
+    await apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
+    await get('/candidates?status=CANDIDATE&sort=score');
+    handleResearch();
+  } });
 
   const items = (candidates || []).filter((i: any) => {
     if (!search) return true;
@@ -273,20 +278,18 @@ export function CandidatesPage() {
 
                 <Divider />
 
-                {/* Buttons — uniform size */}
+                {/* Buttons */}
                 <div style={{ display: 'flex', gap: 6, justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => setPreview(item)} style={{ ...BTN, borderColor: '#C9CCCF', background: '#F6F6F7', color: '#202223' }}>View</button>
                     <button onClick={() => setScoreItem(item)} style={{ ...BTN, borderColor: '#5C6AC4', background: '#F0F0FF', color: '#5C6AC4' }}>📊 Score</button>
                     {item.sourceUrl && <button onClick={() => window.open(item.sourceUrl, '_blank')} style={{ ...BTN, borderColor: '#C9CCCF', background: '#F6F6F7', color: '#202223' }}>Source</button>}
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => del(item.id)} style={{ ...BTN, borderColor: '#E4E5E7', background: 'white', color: '#D72C0D' }}>✕</button>
-                    <button onClick={() => approve(item.id)} disabled={busy === item.id} style={{
-                      ...BTN, borderColor: '#008060', background: '#008060', color: 'white',
-                      animation: 'greenGlow 2s ease-in-out infinite', opacity: busy === item.id ? 0.6 : 1,
-                    }}>{busy === item.id ? '...' : 'Import'}</button>
-                  </div>
+                  <button onClick={() => approve(item.id)} disabled={busy === item.id} style={{
+                    ...BTN, borderColor: '#008060', background: '#008060', color: 'white',
+                    animation: 'greenGlow 2s ease-in-out infinite', opacity: busy === item.id ? 0.6 : 1,
+                    minWidth: 70,
+                  }}>{busy === item.id ? '...' : '✓ Import'}</button>
                 </div>
               </BlockStack>
             </div>
@@ -426,7 +429,7 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[{ content: 'Clear All', onAction: resetAll, destructive: true }]}
+      secondaryActions={[{ content: 'Clear & Re-Research', onAction: resetAll, destructive: true }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">

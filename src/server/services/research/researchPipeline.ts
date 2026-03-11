@@ -57,46 +57,47 @@ async function buildLightDNA(shopId: string): Promise<StoreDNA> {
  * Use AI to generate highly targeted search keywords
  */
 async function aiGenerateKeywords(dna: StoreDNA, settings: MerchantSettingsData): Promise<string[]> {
-  const prompt = `You are an expert e-commerce product researcher. Generate 8-12 highly specific search keywords/phrases to find winning products for this store.
+  const prompt = `You are an expert e-commerce niche researcher. Generate 8-12 search keywords to find products for this store.
 
 STORE PROFILE:
 - Domain: ${dna.domain}
-- Description: ${dna.description}
+- Description: ${dna.description || 'dropshipping store'}
 - Target audience: ${settings.targetAudience?.join(', ') || 'general'}
 - Preferred categories: ${settings.preferredCategories?.join(', ') || 'none'}
 - Price range: $${settings.priceRangeMin || 5} - $${settings.priceRangeMax || 100}
 - Brand vibe: ${dna.brandVibe}
-- Domain keywords: ${dna.domainIntent?.categoryBias?.join(', ') || 'none'}
+- Niche keywords: ${dna.nicheKeywords?.join(', ') || 'none'}
 
-RULES:
-- Each keyword should be 2-4 words, specific enough to find products (not generic)
-- Mix of: trending viral products, evergreen sellers, niche opportunities
-- Consider the price range — don't suggest $500 products for a $10-$50 store
-- Think about what the target audience would actually buy
-- Include seasonal/timely trends if relevant
-- Focus on products with high margin potential for dropshipping
+CRITICAL RULES:
+- ALL keywords MUST belong to ONE cohesive store niche/theme
+- A customer browsing this store should see products that NATURALLY go together
+- Think: "What kind of store is this?" then ONLY suggest products for THAT type of store
+- For example: if it's a gaming store, ALL keywords should be gaming-related
+- If it's a home decor store, ALL keywords should be home decor
+- If categories are broad/unclear, pick the STRONGEST niche signal and focus on that
+- NEVER mix unrelated categories (no gaming keyboards + bicycle lights + leather bags)
+- Each keyword: 2-4 words, specific enough for product search
+- Focus on the price range — don't suggest expensive items for a budget store
 
-Return ONLY a JSON array of strings, nothing else.`;
+Return ONLY a JSON array of strings.`;
 
   try {
     const keywords = await aiComplete<string[]>(prompt, {
-      temperature: 0.7,
+      temperature: 0.5,
       maxTokens: 500,
-      systemPrompt: 'You are a product research AI. Return only valid JSON arrays.',
+      systemPrompt: 'You are a niche product researcher. Return only valid JSON arrays. All keywords must be for ONE cohesive store theme.',
     });
     if (Array.isArray(keywords) && keywords.length > 0) {
-      console.log(`[Research] AI generated ${keywords.length} keywords: ${keywords.join(', ')}`);
+      console.log(`[Research] AI generated ${keywords.length} niche-focused keywords: ${keywords.join(', ')}`);
       return keywords;
     }
   } catch (err) {
     console.warn('[Research] AI keyword generation failed, using fallback:', err);
   }
 
-  // Fallback to basic keywords
   return [
     ...settings.preferredCategories.slice(0, 5),
     ...(dna.domainIntent?.categoryBias?.slice(0, 3) || []),
-    'trending gadgets', 'viral products',
   ].filter(Boolean);
 }
 
@@ -122,7 +123,7 @@ async function aiCurateProducts(
     source: p.sourceName,
   }));
 
-  const prompt = `You are a product-market fit expert for dropshipping. From this list of ${productSummaries.length} products, select the BEST ${maxResults} products for this store.
+  const prompt = `You are a product curator for a FOCUSED niche dropshipping store. From ${productSummaries.length} products, select the BEST ${maxResults} that ALL belong together in ONE cohesive store.
 
 STORE PROFILE:
 - Domain: ${dna.domain}
@@ -135,19 +136,22 @@ STORE PROFILE:
 PRODUCTS:
 ${JSON.stringify(productSummaries, null, 1)}
 
-SELECTION CRITERIA (ranked by importance):
-1. Audience fit — would the target audience actually want this?
-2. Profit margin — at least 50% margin potential
-3. Trend momentum — is this trending or proven bestseller?
-4. Shipping speed — faster is better, US warehouse preferred
-5. Visual appeal — is it photogenic for social media marketing?
-6. Low competition — avoid oversaturated products
-7. Quality signals — good reviews, high order volume
-8. Price fit — within the store's price range
+CRITICAL — NICHE COHERENCE:
+- ALL selected products MUST look like they belong in the SAME store
+- A customer should think "this store sells [one type of thing]"
+- REJECT products that don't fit the store's main theme even if they score well individually
+- Better to return 10 coherent products than 20 random ones
+- If products are mixed categories, pick the dominant niche and ONLY select from that niche
+
+OTHER CRITERIA:
+1. Profit margin — at least 50% markup potential
+2. Quality signals — good reviews, order volume
+3. Visual appeal — photogenic for social media
+4. Price fit — within the store's range
 
 Return ONLY a JSON object with:
-- "selectedIndices": array of ${maxResults} product index numbers (the "idx" field)
-- "reasoning": 2-3 sentence summary of your selection strategy`;
+- "selectedIndices": array of product idx numbers (ONLY coherent products)
+- "reasoning": what niche you focused on and why`;
 
   try {
     const result = await aiComplete<{ selectedIndices: number[]; reasoning: string }>(prompt, {

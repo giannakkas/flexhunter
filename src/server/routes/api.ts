@@ -304,34 +304,28 @@ router.post('/domain/analyze', async (req: Request, res: Response) => {
 router.post('/research/start', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
+    console.log(`[Research] POST /research/start for shop ${shopId}`);
 
-    // Try queue first, fall back to synchronous execution
-    try {
-      await enqueueResearch(shopId);
-      res.json({ success: true, message: 'Research pipeline started (queued)' });
-    } catch (queueErr) {
-      console.warn('Queue unavailable, running research synchronously:', queueErr);
-      // Import and run directly
-      const { runResearchPipeline } = await import('../services/research/researchPipeline');
-      const result = await runResearchPipeline(shopId);
+    // Always run synchronously for now (more reliable than queue)
+    const { runResearchPipeline } = await import('../services/research/researchPipeline');
+    const result = await runResearchPipeline(shopId);
 
-      // Create a completed job record
-      await prisma.jobRun.create({
-        data: {
-          shopId,
-          jobType: 'RESEARCH_PRODUCTS',
-          status: 'COMPLETED',
-          result: result as any,
-          startedAt: new Date(),
-          completedAt: new Date(),
-          progress: 100,
-        },
-      });
+    await prisma.jobRun.create({
+      data: {
+        shopId,
+        jobType: 'RESEARCH_PRODUCTS',
+        status: 'COMPLETED',
+        result: result as any,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        progress: 100,
+      },
+    }).catch(() => {});
 
-      res.json({ success: true, message: 'Research complete', data: result });
-    }
+    console.log(`[Research] Completed: ${result.totalSaved} products saved`);
+    res.json({ success: true, message: 'Research complete', data: result });
   } catch (err: any) {
-    console.error('Research error:', err);
+    console.error('[Research] FAILED:', err.message, err.stack);
     res.status(500).json({ success: false, error: err.message });
   }
 });
