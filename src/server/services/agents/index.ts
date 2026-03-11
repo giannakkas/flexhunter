@@ -6,6 +6,10 @@
 
 import { aiComplete } from '../../utils/ai';
 import { NormalizedProduct, StoreDNA, MerchantSettingsData } from '../../../shared/types';
+import { predictViralPotential, ViralPrediction } from './viralPredictionAgent';
+
+// Re-export
+export { predictViralPotential, ViralPrediction } from './viralPredictionAgent';
 
 // ── Agent Interfaces ────────────────────────────
 
@@ -20,6 +24,7 @@ export interface MultiAgentScore {
   storeFit: AgentResult;
   profitability: AgentResult;
   trendPotential: AgentResult;
+  viralPrediction: ViralPrediction;
   saturation: AgentResult;
   supplierQuality: AgentResult;
   finalScore: number;
@@ -201,10 +206,11 @@ export function supplierQualityAgent(product: NormalizedProduct): AgentResult {
 // ── Scoring Agent (Orchestrator) ────────────────
 
 const WEIGHTS = {
-  storeFit: 0.30,      // Most important — must match the store
-  profitability: 0.20,
-  trendPotential: 0.20,
-  saturation: 0.15,
+  storeFit: 0.25,
+  profitability: 0.15,
+  trendPotential: 0.15,
+  viralPrediction: 0.20,
+  saturation: 0.10,
   supplierQuality: 0.15,
 };
 
@@ -213,11 +219,12 @@ export async function runMultiAgentScoring(
   dna: StoreDNA,
   settings: MerchantSettingsData,
 ): Promise<MultiAgentScore> {
-  // Run agents in parallel for speed
-  const [fit, profit, trend, saturation, supplier] = await Promise.all([
+  // Run ALL 6 agents in parallel for speed
+  const [fit, profit, trend, viral, saturation, supplier] = await Promise.all([
     storeFitAgent(product, dna, settings),
     profitAgent(product),
     trendAgent(product),
+    predictViralPotential(product),
     saturationAgent(product, dna),
     Promise.resolve(supplierQualityAgent(product)),
   ]);
@@ -227,11 +234,12 @@ export async function runMultiAgentScoring(
     fit.score * WEIGHTS.storeFit +
     profit.score * WEIGHTS.profitability +
     trend.score * WEIGHTS.trendPotential +
+    viral.viralScore * WEIGHTS.viralPrediction +
     saturation.score * WEIGHTS.saturation +
     supplier.score * WEIGHTS.supplierQuality
   );
 
-  // Recommendation based on score + fit
+  // Recommendation
   let recommendation: MultiAgentScore['recommendation'];
   if (fit.score < 30) recommendation = 'avoid';
   else if (finalScore >= 80 && fit.score >= 70) recommendation = 'strong_buy';
@@ -240,14 +248,21 @@ export async function runMultiAgentScoring(
   else if (fit.score < 50) recommendation = 'avoid';
   else recommendation = 'skip';
 
+  // Boost strong_buy for early viral products
+  if (viral.trendStage === 'early_acceleration' && recommendation === 'buy') {
+    recommendation = 'strong_buy';
+  }
+
   const explanation = `Store fit: ${fit.score}/100 — ${fit.reasoning}. ` +
     `Profit: ${profit.reasoning}. Trend: ${trend.reasoning}. ` +
+    `Viral: ${viral.trendStage} (${viral.viralScore}/100). ` +
     `Supplier: ${supplier.reasoning}.`;
 
   return {
     storeFit: fit,
     profitability: profit,
     trendPotential: trend,
+    viralPrediction: viral,
     saturation,
     supplierQuality: supplier,
     finalScore,

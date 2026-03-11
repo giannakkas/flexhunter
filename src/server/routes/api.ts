@@ -959,24 +959,25 @@ router.put('/settings', async (req: Request, res: Response) => {
 router.post('/performance/sync', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
+    const { syncPerformance } = await import('../services/performance/performanceSync');
+    const result = await syncPerformance(shopId);
+    res.json({ success: true, message: `Synced ${result.synced} products, ${result.weak} weak detected`, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    try {
-      await enqueuePerformanceSync(shopId);
-    } catch {
-      // Queue unavailable - create a sync record anyway
-      await prisma.jobRun.create({
-        data: {
-          shopId,
-          jobType: 'SYNC_PERFORMANCE',
-          status: 'COMPLETED',
-          startedAt: new Date(),
-          completedAt: new Date(),
-          progress: 100,
-        },
-      });
-    }
-
-    res.json({ success: true, message: 'Performance sync triggered' });
+// Auto-replacement scan
+router.post('/replacements/scan', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { scanForReplacements } = await import('../services/replacement/autoReplace');
+    const suggestions = await scanForReplacements(shopId);
+    res.json({ success: true, data: suggestions, message: `Found ${suggestions.length} replacement suggestions` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -10,10 +10,19 @@ import path from 'path';
 import { config } from './config';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
+import webhookRoutes from './routes/webhooks';
+import billingRoutes from './routes/billing';
 
 const app = express();
 
 // ── Middleware ──────────────────────────────────
+
+// Raw body capture for webhook verification (before json parser)
+app.use('/api/webhooks', express.raw({ type: 'application/json' }), (req: any, _res, next) => {
+  req.rawBody = req.body;
+  if (Buffer.isBuffer(req.body)) req.body = JSON.parse(req.body.toString());
+  next();
+});
 
 app.use(cors({
   origin: true,
@@ -26,6 +35,12 @@ app.use(cookieParser());
 
 // Shopify auth
 app.use('/api/auth', authRoutes);
+
+// Webhooks (before API routes)
+app.use('/api', webhookRoutes);
+
+// Billing
+app.use('/api', billingRoutes);
 
 // API routes
 app.use('/api', apiRoutes);

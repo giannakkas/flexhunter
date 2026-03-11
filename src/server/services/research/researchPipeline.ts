@@ -295,9 +295,9 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
           candidateId: candidate.id,
           domainFit: agentScore.storeFit.score,
           storeFit: agentScore.storeFit.score,
-          audienceFit: agentScore.storeFit.score, // agent covers audience
+          audienceFit: agentScore.storeFit.score,
           trendFit: agentScore.trendPotential.score,
-          visualVirality: Math.round(agentScore.trendPotential.score * 0.8),
+          visualVirality: agentScore.viralPrediction.viralScore,
           novelty: agentScore.saturation.score,
           priceFit: agentScore.profitability.score,
           marginFit: agentScore.profitability.score,
@@ -310,12 +310,14 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
           fitReasons: [
             ...agentScore.storeFit.signals,
             ...agentScore.profitability.signals.slice(0, 2),
+            ...agentScore.viralPrediction.signals.slice(0, 2),
             ...agentScore.trendPotential.signals.slice(0, 1),
           ],
           concerns: [
             ...(agentScore.storeFit.score < 60 ? ['Moderate store fit'] : []),
             ...(agentScore.saturation.score < 40 ? ['High market saturation'] : []),
             ...(agentScore.supplierQuality.score < 40 ? ['Shipping quality concerns'] : []),
+            ...(agentScore.viralPrediction.trendStage === 'saturated' ? ['Product may be past peak'] : []),
           ],
           scoredAt: new Date(),
         },
