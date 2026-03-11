@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Select, TextField,
   Checkbox, Button, Banner, Divider, RangeSlider, ChoiceList,
-  EmptyState,
+  EmptyState, Badge, InlineStack, InlineGrid,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { useApi, apiFetch } from '../hooks/useApi';
@@ -169,7 +169,27 @@ export function SettingsPage() {
           </BlockStack>
         </Card>
 
-        {/* Danger Zone */}
+        {/* Product Sources */}
+        <Card>
+          <BlockStack gap="400">
+            <Text as="h2" variant="headingMd">Product Sources & Trend Signals</Text>
+            <Text as="p" variant="bodySm" tone="subdued">
+              Active sources are searched during AI research. Toggle to enable/disable.
+            </Text>
+            <SupplierToggles />
+          </BlockStack>
+        </Card>
+
+        {/* Request Provider */}
+        <Card>
+          <BlockStack gap="300">
+            <Text as="h2" variant="headingMd">Request a New Source</Text>
+            <Text as="p" tone="subdued">Want a specific supplier or marketplace integrated?</Text>
+            <ProviderRequestForm />
+          </BlockStack>
+        </Card>
+
+        {/* Shopify Connection */}
         <Card>
           <BlockStack gap="400">
             <Text as="h2" variant="headingMd">Shopify Connection</Text>
@@ -195,6 +215,90 @@ export function SettingsPage() {
         <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
+  );
+}
+
+function SupplierToggles() {
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [states, setStates] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    apiFetch<any>('/suppliers').then(r => {
+      if (r.data) {
+        setSuppliers(r.data);
+        const s: Record<string, boolean> = {};
+        for (const sup of r.data) s[sup.name] = sup.enabled;
+        setStates(s);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const toggle = async (name: string) => {
+    const cur = states[name] !== false;
+    setStates(p => ({ ...p, [name]: !cur }));
+    try { await apiFetch('/suppliers/toggle', { method: 'POST', body: JSON.stringify({ name, enabled: !cur }) }); } catch {}
+  };
+
+  const icons: Record<string, string> = {
+    'AliExpress': '🛒', 'CJ Dropshipping': '📦', 'Zendrop': '🚀', 'Spocket': '💎',
+    'Alibaba': '🏭', 'Temu Trends': '🔥', 'TikTok Trends': '📱', 'Amazon Trends': '📊',
+    'CSV Feed': '📄', 'Manual Entry': '✏️',
+  };
+
+  return (
+    <InlineGrid columns={2} gap="300">
+      {suppliers.filter(s => s.name !== 'CSV Feed' && s.name !== 'Manual Entry').map(s => (
+        <div key={s.name} style={{
+          padding: '12px 16px', borderRadius: 10, border: '1px solid #E4E5E7',
+          background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        }}>
+          <InlineStack gap="200" blockAlign="center">
+            <span style={{ fontSize: 18 }}>{icons[s.name] || '📦'}</span>
+            <BlockStack gap="0">
+              <Text as="span" variant="bodySm" fontWeight="bold">{s.name}</Text>
+              <Badge tone={s.live ? 'success' : 'info'}>{s.live ? 'LIVE' : 'Mock'}</Badge>
+            </BlockStack>
+          </InlineStack>
+          <div onClick={() => toggle(s.name)} style={{
+            width: 38, height: 20, borderRadius: 10, cursor: 'pointer',
+            background: states[s.name] !== false ? '#008060' : '#D0D5DD',
+            position: 'relative', transition: 'background 0.2s ease',
+          }}>
+            <div style={{
+              width: 16, height: 16, borderRadius: '50%', background: 'white',
+              position: 'absolute', top: 2,
+              left: states[s.name] !== false ? 20 : 2,
+              transition: 'left 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }} />
+          </div>
+        </div>
+      ))}
+    </InlineGrid>
+  );
+}
+
+function ProviderRequestForm() {
+  const [provider, setProvider] = useState('');
+  const [details, setDetails] = useState('');
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async () => {
+    try { await apiFetch('/provider-request', { method: 'POST', body: JSON.stringify({ provider, details }) }); } catch {}
+    setSubmitted(true); setProvider(''); setDetails('');
+  };
+
+  if (submitted) {
+    return <Banner tone="success" onDismiss={() => setSubmitted(false)}><Text as="p">Request submitted!</Text></Banner>;
+  }
+
+  return (
+    <BlockStack gap="300">
+      <TextField label="Provider Name" value={provider} onChange={setProvider}
+        placeholder="e.g., DSers, Oberlo, AutoDS..." autoComplete="off" />
+      <TextField label="Why? (optional)" value={details} onChange={setDetails}
+        placeholder="Better shipping, niche products..." multiline={2} autoComplete="off" />
+      <Button variant="primary" onClick={handleSubmit} disabled={!provider.trim()}>Submit Request</Button>
+    </BlockStack>
   );
 }
 

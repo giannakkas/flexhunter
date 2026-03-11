@@ -200,6 +200,38 @@ router.get('/store-dna', async (req: Request, res: Response) => {
   }
 });
 
+router.put('/store-dna', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const updates = req.body;
+
+    // Map DNA fields to StoreProfile columns
+    const profileFields: Record<string, any> = {};
+    const settingsFields: Record<string, any> = {};
+
+    if (updates.brandVibe !== undefined) profileFields.brandVibe = updates.brandVibe;
+    if (updates.pricePositioning !== undefined) profileFields.pricePositioning = updates.pricePositioning;
+    if (updates.nicheKeywords !== undefined) profileFields.nicheKeywords = updates.nicheKeywords;
+    if (updates.audienceSegments !== undefined) profileFields.audienceSegments = updates.audienceSegments;
+    if (updates.toneAttributes !== undefined) profileFields.toneAttributes = updates.toneAttributes;
+    if (updates.catalogGaps !== undefined) profileFields.catalogGaps = updates.catalogGaps;
+    if (updates.catalogStrengths !== undefined) profileFields.catalogStrengths = updates.catalogStrengths;
+    if (updates.topCategories !== undefined) profileFields.topCategories = updates.topCategories;
+    if (updates.description !== undefined) settingsFields.storeDescription = updates.description;
+
+    if (Object.keys(profileFields).length > 0) {
+      await prisma.storeProfile.update({ where: { shopId }, data: profileFields });
+    }
+    if (Object.keys(settingsFields).length > 0) {
+      await prisma.merchantSettings.update({ where: { shopId }, data: settingsFields });
+    }
+
+    res.json({ success: true, message: 'DNA updated' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/store-dna/analyze', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);

@@ -25,7 +25,7 @@ export function AppHeader() {
       <div style={{ display: 'flex', gap: 4, flexWrap: 'nowrap' }}>
         {[
           { path: '/', label: 'Dashboard' },
-          { path: '/research', label: 'Research' },
+          { path: '/research', label: 'Store DNA' },
           { path: '/candidates', label: 'Candidates' },
           { path: '/imports', label: 'Imported' },
         ].map(item => (
