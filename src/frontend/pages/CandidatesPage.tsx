@@ -7,7 +7,13 @@ import {
 import { useApi, apiFetch } from '../hooks/useApi';
 
 const PLACEHOLDER = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
-const GLOW_CSS = `@keyframes greenGlow { 0%,100% { box-shadow: 0 0 6px rgba(0,128,96,0.4); } 50% { box-shadow: 0 0 16px rgba(0,128,96,0.7); } }`;
+const GLOW_CSS = `
+@keyframes greenGlow { 0%,100% { box-shadow: 0 0 6px rgba(0,128,96,0.4); } 50% { box-shadow: 0 0 16px rgba(0,128,96,0.7); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes pulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.05); opacity: 0.8; } }
+@keyframes orbit { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes dotPulse { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+`;
 const BTN = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 30, padding: '0 12px', fontSize: 12, fontWeight: 600, borderRadius: 6, cursor: 'pointer', border: '1px solid', transition: 'all 0.15s ease', whiteSpace: 'nowrap' as const };
 
 function AutoDismiss({ message, onDismiss }: { message: string; onDismiss: () => void }) {
@@ -121,7 +127,57 @@ export function CandidatesPage() {
   const [selIds, setSelIds] = useState<Set<string>>(new Set());
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; title: string; body: string; fn: () => void }>({ open: false, title: '', body: '', fn: () => {} });
 
+  // Research animation state
+  const [researchRunning, setResearchRunning] = useState(false);
+  const [researchProgress, setResearchProgress] = useState(0);
+  const [researchStage, setResearchStage] = useState('');
+
   useEffect(() => { get('/candidates?status=CANDIDATE&sort=score'); }, [get]);
+
+  const handleResearch = async () => {
+    setResearchRunning(true);
+    setResearchProgress(0);
+    setResearchStage('Initializing AI research engine...');
+
+    const stages = [
+      { at: 3, text: '🧬 Loading your store DNA profile...' },
+      { at: 8, text: '🔑 AI generating targeted search keywords...' },
+      { at: 15, text: '🌐 Connecting to AliExpress live API...' },
+      { at: 22, text: '📦 Connecting to CJ Dropshipping live API...' },
+      { at: 30, text: '🔍 Searching products across all suppliers...' },
+      { at: 40, text: '📊 AI analyzing product-market fit...' },
+      { at: 50, text: '🤖 Deep scoring audience match...' },
+      { at: 58, text: '📈 Evaluating trend momentum & virality...' },
+      { at: 65, text: '💰 Calculating profit margins & shipping...' },
+      { at: 72, text: '🎯 AI curating top products for your store...' },
+      { at: 80, text: '⚖️ Blending AI + algorithmic scores...' },
+      { at: 87, text: '🏆 Final ranking by weighted score...' },
+      { at: 93, text: '💾 Saving winning products...' },
+      { at: 97, text: '✅ Almost done...' },
+    ];
+
+    let prog = 0;
+    const interval = setInterval(() => {
+      prog += Math.random() * 1.8 + 0.4;
+      if (prog > 97) prog = 97;
+      setResearchProgress(prog);
+      const stage = [...stages].reverse().find(s => prog >= s.at);
+      if (stage) setResearchStage(stage.text);
+    }, 500);
+
+    try {
+      const result = await apiFetch<any>('/research/start', { method: 'POST' });
+      clearInterval(interval);
+      setResearchProgress(100);
+      setResearchStage(`✅ Research complete! Found ${result.data?.totalSaved || 0} winning products.`);
+      await get('/candidates?status=CANDIDATE&sort=score');
+      setTimeout(() => { setResearchRunning(false); }, 2000);
+    } catch (err: any) {
+      clearInterval(interval);
+      setResearchRunning(false);
+      setMsg(`Research failed: ${err.message}`);
+    }
+  };
 
   const approve = async (id: string) => {
     setBusy(id);
@@ -369,15 +425,68 @@ export function CandidatesPage() {
 
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
-      primaryAction={{ content: '🔬 Run AI Research', onAction: async () => {
-        setMsg('Running AI research...'); await apiFetch('/research/start', { method: 'POST' });
-        await get('/candidates?status=CANDIDATE&sort=score'); setMsg('Research complete!');
-      }}}
+      primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
       secondaryActions={[{ content: 'Clear All', onAction: resetAll, destructive: true }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
         {msg && <AutoDismiss message={msg} onDismiss={() => setMsg(null)} />}
+
+        {/* ── Research Animation Overlay ── */}
+        {researchRunning && (
+          <Card>
+            <div style={{ padding: '20px 0' }}>
+              <BlockStack gap="400">
+                {/* AI Brain animation */}
+                <div style={{ display: 'flex', justifyContent: 'center' }}>
+                  <div style={{
+                    width: 80, height: 80, borderRadius: '50%', position: 'relative',
+                    background: 'linear-gradient(135deg, #5C6AC4, #8B5CF6)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    animation: 'pulse 2s ease-in-out infinite',
+                    boxShadow: '0 0 30px rgba(92,106,196,0.4)',
+                  }}>
+                    <div style={{
+                      position: 'absolute', inset: -6, borderRadius: '50%',
+                      border: '2px dashed rgba(92,106,196,0.4)',
+                      animation: 'orbit 3s linear infinite',
+                    }} />
+                    <span style={{ fontSize: 36, zIndex: 1 }}>🔬</span>
+                  </div>
+                </div>
+
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingMd" alignment="center">AI Research in Progress</Text>
+                  <Text as="p" variant="bodySm" tone="subdued" alignment="center">
+                    Searching live suppliers and scoring products for your store...
+                  </Text>
+                </BlockStack>
+
+                {/* Progress bar */}
+                <div style={{ height: 12, borderRadius: 6, background: '#E4E5E7', overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%', borderRadius: 6,
+                    background: researchProgress >= 100
+                      ? 'linear-gradient(90deg, #008060, #00B386)'
+                      : 'linear-gradient(90deg, #5C6AC4, #8B5CF6, #007ACE, #5C6AC4)',
+                    backgroundSize: '300% 100%',
+                    animation: researchProgress < 100 ? 'shimmer 1.5s linear infinite' : 'none',
+                    width: `${researchProgress}%`,
+                    transition: 'width 0.5s ease',
+                  }} />
+                </div>
+
+                <InlineStack align="space-between">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#5C6AC4', animation: 'dotPulse 1s ease-in-out infinite' }} />
+                    <Text as="p" variant="bodySm" tone="subdued">{researchStage}</Text>
+                  </div>
+                  <Text as="p" variant="bodySm" fontWeight="bold">{Math.round(researchProgress)}%</Text>
+                </InlineStack>
+              </BlockStack>
+            </div>
+          </Card>
+        )}
 
         <InlineStack align="space-between">
           <InlineStack gap="200">
@@ -399,9 +508,7 @@ export function CandidatesPage() {
 
         {!loading && items.length === 0 && (
           <Card><EmptyState heading="No products yet" image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-            action={{ content: '🔬 Run AI Research', onAction: async () => {
-              setMsg('Running...'); await apiFetch('/research/start', { method: 'POST' }); await get('/candidates?status=CANDIDATE&sort=score'); setMsg('Done!');
-            }}}><Text as="p">Run AI research to discover winning products for your store.</Text></EmptyState></Card>
+            action={{ content: '🔬 Run AI Research', onAction: handleResearch }}><Text as="p">Run AI research to discover winning products for your store.</Text></EmptyState></Card>
         )}
 
         {!loading && items.length > 0 && view === 'grid' && gridMarkup}

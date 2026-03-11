@@ -226,6 +226,13 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   console.log(`[Research] ====== Starting AI-powered deep research ======`);
   console.log(`[Research] Shop: ${shopId}, Batch: ${batchId}`);
 
+  // Pre-check: verify at least one provider is available
+  const availableProviders = providerRegistry.getAvailable().filter(p => p.name !== 'CSV Feed' && p.name !== 'Manual Entry');
+  console.log(`[Research] Available live providers: ${availableProviders.map(p => p.name).join(', ') || 'NONE'}`);
+  if (availableProviders.length === 0) {
+    throw new Error('No product sources available. Please add CJ_API_KEY or RAPIDAPI_KEY in Railway environment variables.');
+  }
+
   // Step 1: Build store DNA
   const dna = await buildLightDNA(shopId);
   console.log(`[Research] Step 1/8: DNA built for ${dna.domain}`);
@@ -279,6 +286,10 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   });
   console.log(`[Research] Step 4/8: Fetched ${rawProducts.length} products, ${unique.length} unique`);
 
+  if (unique.length === 0) {
+    throw new Error(`No products found from ${availableProviders.map(p => p.name).join(', ')}. Try broadening your categories or price range in Store DNA.`);
+  }
+
   // Step 5: Filter banned categories
   const filtered = unique.filter((p) => {
     const cat = (p.category || '').toLowerCase();
@@ -295,11 +306,15 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const curatedProducts = curation.selectedIndices
     .filter(i => i >= 0 && i < filtered.length)
     .map(i => filtered[i]);
-  console.log(`[Research] Step 6/8: AI curated ${curatedProducts.length} products`);
+  // If AI curation returned nothing, take top products by review/order volume
+  const finalCurated = curatedProducts.length > 0
+    ? curatedProducts
+    : filtered.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
+  console.log(`[Research] Step 6/8: AI curated ${finalCurated.length} products (from ${filtered.length} filtered)`);
 
   // Step 7: Deep score each curated product (AI + algorithmic)
   const scored: (NormalizedProduct & { score: any; aiScore: any })[] = [];
-  for (const product of curatedProducts) {
+  for (const product of finalCurated) {
     try {
       // Algorithmic scoring
       const algoScore = await scoreProduct(product, dna, settingsData, DEFAULT_SCORE_WEIGHTS, false);
@@ -426,7 +441,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
         batchId,
         totalFetched: rawProducts.length,
         unique: unique.length,
-        aiCurated: curatedProducts.length,
+        aiCurated: finalCurated.length,
         scored: scored.length,
         saved: savedCount,
         keywords,
