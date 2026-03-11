@@ -7,7 +7,7 @@ export function AppHeader() {
   return (
     <div style={{
       background: 'linear-gradient(135deg, #0D1117 0%, #161B22 40%, #1A2332 100%)',
-      borderRadius: 10, padding: '14px 20px', marginBottom: 4,
+      borderRadius: 0, padding: '14px 20px', marginBottom: 4, marginLeft: -20, marginRight: -20, marginTop: -16,
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

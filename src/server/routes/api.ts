@@ -322,7 +322,7 @@ router.get('/research/status', async (req: Request, res: Response) => {
 router.get('/candidates', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
-    const { status, sort, page = '1', limit = '20' } = req.query;
+    const { status, sort, page = '1', limit = '200' } = req.query;
 
     const where: any = { shopId };
     if (status) where.status = status;
