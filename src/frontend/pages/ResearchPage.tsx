@@ -456,7 +456,7 @@ export function ResearchPage() {
                 </div>
                 <BlockStack gap="0">
                   <Text as="h2" variant="headingMd">How Your DNA Powers Research</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">When you run research from Candidates, here's what happens</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">When you run research from the Research page, here's what happens</Text>
                 </BlockStack>
               </InlineStack>
 
@@ -494,7 +494,7 @@ export function ResearchPage() {
 
               <div style={{ textAlign: 'center', paddingTop: 8 }}>
                 <Button variant="primary" size="large" onClick={() => navigate('/candidates')}>
-                  Go to Candidates to Run Research →
+                  Go to Research →
                 </Button>
               </div>
             </BlockStack>

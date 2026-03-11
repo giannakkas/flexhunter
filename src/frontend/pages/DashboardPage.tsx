@@ -232,7 +232,7 @@ export function DashboardPage() {
 
         {/* ── Hero Stats ── */}
         <InlineGrid columns={4} gap="300">
-          <StatCard title="Candidates" value={d.totalCandidates} icon="🔍" color="#3B82F6" bg="#EFF6FF" subtitle="products found" delay={0} />
+          <StatCard title="Discovered" value={d.totalCandidates} icon="🔍" color="#3B82F6" bg="#EFF6FF" subtitle="products found" delay={0} />
           <StatCard title="Imported" value={d.totalImported} icon="📦" color="#8B5CF6" bg="#F5F3FF" subtitle={`${d.totalTesting} testing · ${d.totalWinners} winners`} delay={100} />
           <StatCard title="Revenue" value={d.totalRevenue} prefix="$" icon="💰" color="#10B981" bg="#ECFDF5" subtitle="from imported products" delay={200} />
           <StatCard title="Weak Products" value={d.totalWeak} icon="⚠️" color={d.totalWeak > 0 ? '#EF4444' : '#9CA3AF'} bg={d.totalWeak > 0 ? '#FEF2F2' : '#F9FAFB'} subtitle={d.totalWeak > 0 ? 'need replacement' : 'none detected'} delay={300} />
@@ -290,7 +290,7 @@ export function DashboardPage() {
               <button onClick={() => navigate('/candidates')} style={actionBtnStyle('#8B5CF6', '#F5F3FF')}>
                 <span style={{ fontSize: 18 }}>📋</span>
                 <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>Review Candidates</div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Review Products</div>
                   <div style={{ fontSize: 11, color: '#6B7280' }}>{d.totalCandidates} products waiting</div>
                 </div>
                 <span style={{ color: '#9CA3AF' }}>→</span>

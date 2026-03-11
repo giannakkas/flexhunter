@@ -131,9 +131,9 @@ export function ImportsPage() {
           <Card>
             <EmptyState heading="No products imported yet"
               image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
-              action={{ content: 'Browse Candidates', onAction: () => navigate('/candidates') }}
+              action={{ content: 'Go to Research', onAction: () => navigate('/candidates') }}
             >
-              <Text as="p">Approve candidates from research to start importing.</Text>
+              <Text as="p">Run AI research to discover and import winning products.</Text>
             </EmptyState>
           </Card>
         ) : (

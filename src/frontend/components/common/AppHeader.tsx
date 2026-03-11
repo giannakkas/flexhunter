@@ -26,7 +26,7 @@ export function AppHeader() {
         {[
           { path: '/', label: 'Dashboard' },
           { path: '/research', label: 'Store DNA' },
-          { path: '/candidates', label: 'Candidates' },
+          { path: '/candidates', label: 'Research' },
           { path: '/imports', label: 'Imported' },
         ].map(item => (
           <button key={item.path} onClick={() => navigate(item.path)} style={{

@@ -35,7 +35,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
             selected: location.pathname === '/research',
           },
           {
-            label: 'Candidates',
+            label: 'Research',
             icon: ProductIcon,
             onClick: () => navigate('/candidates'),
             selected: location.pathname === '/candidates',
