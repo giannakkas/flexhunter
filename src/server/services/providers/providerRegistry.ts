@@ -386,11 +386,11 @@ export class ProviderRegistry {
   }
 
   register(provider: SourceProvider): void {
-    this.providers.set(provider.type, provider);
+    this.providers.set(provider.name, provider);
   }
 
-  get(type: string): SourceProvider | undefined {
-    return this.providers.get(type);
+  get(name: string): SourceProvider | undefined {
+    return this.providers.get(name);
   }
 
   getAvailable(): SourceProvider[] {

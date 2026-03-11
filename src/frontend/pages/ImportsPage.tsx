@@ -94,7 +94,7 @@ export function ImportsPage() {
           </Banner>
         )}
 
-        {shopStatus && shopStatus.hasToken && (
+        {shopStatus && shopStatus.hasToken && shopStatus.importErrors && (
           <Banner tone="warning" title="Import issues?"
             action={{ content: 'Update Token in Settings', onAction: () => navigate('/settings') }}>
             <Text as="p">If imports fail, update your access token in Settings. Make sure write_products scope is enabled.</Text>
