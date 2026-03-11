@@ -23,27 +23,52 @@ export function ImportsPage() {
   const [shopStatus, setShopStatus] = useState<any>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [msgTone, setMsgTone] = useState<'success' | 'critical'>('success');
 
   useEffect(() => {
     get('/imports');
     apiFetch<any>('/shop-status').then(r => setShopStatus(r.data)).catch(() => {});
   }, [get]);
 
+  // Auto-dismiss message
+  useEffect(() => {
+    if (message) { const t = setTimeout(() => setMessage(null), 5000); return () => clearTimeout(t); }
+  }, [message]);
+
   const handlePin = async (id: string) => { await post(`/imports/${id}/pin`, { reason: 'Pinned' }); get('/imports'); };
   const handleUnpin = async (id: string) => { await post(`/imports/${id}/unpin`); get('/imports'); };
-  const handleDelete = async () => {
+
+  const handleDeleteOne = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
     try {
-      await apiFetch(`/imports/${deleteTarget}`, { method: 'DELETE' });
-      setMessage('Product deleted from FlexHunter and Shopify.');
+      const r = await apiFetch<any>(`/imports/${deleteTarget}`, { method: 'DELETE' });
+      setMessage(r.message || 'Product deleted.');
+      setMsgTone('success');
     } catch (e: any) {
       setMessage(`Delete failed: ${e.message}`);
+      setMsgTone('critical');
     }
     setDeleting(false);
     setDeleteTarget(null);
+    get('/imports');
+  };
+
+  const handleDeleteAll = async () => {
+    setDeleting(true);
+    try {
+      const r = await apiFetch<any>('/imports', { method: 'DELETE' });
+      setMessage(r.message || 'All products deleted.');
+      setMsgTone('success');
+    } catch (e: any) {
+      setMessage(`Delete all failed: ${e.message}`);
+      setMsgTone('critical');
+    }
+    setDeleting(false);
+    setDeleteAllOpen(false);
     get('/imports');
   };
 
@@ -71,8 +96,10 @@ export function ImportsPage() {
           <Text as="span">${item.importedPrice?.toFixed(2) || '-'}</Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Badge tone={st.tone}>{st.label}</Badge>
-          {item.shopifyStatus === 'MOCK' && <Badge tone="warning">Not in Shopify</Badge>}
+          <InlineStack gap="100">
+            <Badge tone={st.tone}>{st.label}</Badge>
+            {item.shopifyStatus === 'MOCK' && <Badge tone="warning">Not in Shopify</Badge>}
+          </InlineStack>
         </IndexTable.Cell>
         <IndexTable.Cell>
           {perf ? (
@@ -86,14 +113,12 @@ export function ImportsPage() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <InlineStack gap="200">
-            <Button size="slim" variant="primary" onClick={() => navigate(`/seo?product=${item.id}`)}>
-              SEO
-            </Button>
+            <Button size="slim" variant="primary" onClick={() => navigate(`/seo?product=${item.id}`)}>SEO</Button>
             {item.isPinned
               ? <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
               : <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
             }
-            <Button size="slim" tone="critical" variant="plain" onClick={() => setDeleteTarget(item.id)}>Delete</Button>
+            <Button size="slim" tone="critical" onClick={() => setDeleteTarget(item.id)}>Delete</Button>
           </InlineStack>
         </IndexTable.Cell>
       </IndexTable.Row>
@@ -101,30 +126,21 @@ export function ImportsPage() {
   });
 
   return (
-    <Page title="Imported Products" subtitle={`${items.length} products`}>
+    <Page title="Imported Products" subtitle={`${items.length} products`}
+      secondaryActions={items.length > 0 ? [{ content: 'Delete All Imported', onAction: () => setDeleteAllOpen(true), destructive: true }] : []}
+    >
       <BlockStack gap="400">
-        {/* Shopify connection warning */}
+        {message && (
+          <Banner tone={msgTone} onDismiss={() => setMessage(null)}>
+            <Text as="p">{message}</Text>
+          </Banner>
+        )}
+
         {shopStatus && !shopStatus.hasToken && (
           <Banner tone="critical" title="Products are NOT appearing in your Shopify store"
             action={{ content: 'Setup Connection', onAction: () => navigate('/settings') }}>
             <Text as="p">Complete a quick 2-minute setup in Settings to connect FlexHunter to your store.</Text>
           </Banner>
-        )}
-
-        {shopStatus && shopStatus.hasToken && shopStatus.importErrors && (
-          <Banner tone="warning" title="Import issues?"
-            action={{ content: 'Update Token in Settings', onAction: () => navigate('/settings') }}>
-            <Text as="p">If imports fail, update your access token in Settings. Make sure write_products scope is enabled.</Text>
-          </Banner>
-        )}
-
-        {selectedIds.size > 0 && (
-          <InlineStack gap="200">
-            <Badge>{selectedIds.size} selected</Badge>
-            <Button size="slim" variant="primary" onClick={() => {
-              for (const id of selectedIds) navigate(`/seo?product=${id}`);
-            }}>Optimize SEO</Button>
-          </InlineStack>
         )}
 
         {items.length === 0 && !loading ? (
@@ -148,17 +164,7 @@ export function ImportsPage() {
                 { title: 'Health' },
                 { title: 'Actions' },
               ]}
-              selectable={true}
-              selectedItemsCount={selectedIds.size}
-              onSelectionChange={(type) => {
-                if (type === 'page') {
-                  selectedIds.size === items.length
-                    ? setSelectedIds(new Set())
-                    : setSelectedIds(new Set(items.map((i: any) => i.id)));
-                } else {
-                  setSelectedIds(new Set());
-                }
-              }}
+              selectable={false}
               loading={loading}
             >
               {rowMarkup}
@@ -166,20 +172,28 @@ export function ImportsPage() {
           </Card>
         )}
 
-        <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Imported Product"
-          primaryAction={{ content: 'Delete', onAction: handleDelete, destructive: true, loading: deleting }}
+        {/* Delete One Modal */}
+        <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Delete Product"
+          primaryAction={{ content: 'Delete Product', onAction: handleDeleteOne, destructive: true, loading: deleting }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setDeleteTarget(null) }]}
         >
           <Modal.Section>
-            <Text as="p">This will delete the product from FlexHunter and remove it from your Shopify store. This cannot be undone.</Text>
+            <Text as="p">This will permanently delete this product from FlexHunter and remove it from your Shopify store.</Text>
           </Modal.Section>
         </Modal>
 
-        {message && (
-          <Banner tone={message.includes('failed') ? 'critical' : 'success'} onDismiss={() => setMessage(null)}>
-            <Text as="p">{message}</Text>
-          </Banner>
-        )}
+        {/* Delete All Modal */}
+        <Modal open={deleteAllOpen} onClose={() => setDeleteAllOpen(false)} title="Delete ALL Imported Products"
+          primaryAction={{ content: `Delete All ${items.length} Products`, onAction: handleDeleteAll, destructive: true, loading: deleting }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setDeleteAllOpen(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="200">
+              <Text as="p">This will permanently delete ALL {items.length} imported products from FlexHunter and remove them from your Shopify store.</Text>
+              <Text as="p" fontWeight="bold" tone="critical">This cannot be undone.</Text>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
 
         <div style={{ height: 80 }} />
       </BlockStack>

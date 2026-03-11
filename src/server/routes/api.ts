@@ -629,11 +629,15 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const shopId = await getOrCreateShop(req);
+    console.log(`[Import] DELETE request for imported product ${id}`);
 
-    const imported = await prisma.importedProduct.findUniqueOrThrow({
+    const imported = await prisma.importedProduct.findUnique({
       where: { id },
-      include: { candidate: true },
     });
+
+    if (!imported) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
 
     // Try to delete from Shopify if it was a real import
     if (imported.shopifyProductId && imported.shopifyStatus !== 'MOCK') {
@@ -645,27 +649,33 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
             method: 'DELETE',
             headers: { 'X-Shopify-Access-Token': shop.accessToken },
           });
-          console.log(`[Import] Deleted Shopify product ${imported.shopifyProductId}: ${r.status}`);
+          console.log(`[Import] Shopify delete ${imported.shopifyProductId}: ${r.status}`);
         }
       } catch (err: any) {
-        console.warn(`[Import] Failed to delete from Shopify: ${err.message}`);
+        console.warn(`[Import] Shopify delete failed (continuing): ${err.message}`);
       }
     }
 
-    // Delete related records that don't cascade
-    await prisma.replacementDecision.deleteMany({ where: { currentProductId: id } }).catch(() => {});
-    await prisma.productPin.deleteMany({ where: { importedProductId: id } }).catch(() => {});
+    // Delete everything in a transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete all related records first
+      await tx.replacementDecision.deleteMany({ where: { currentProductId: id } });
+      await tx.productPin.deleteMany({ where: { importedProductId: id } });
+      await tx.productPerformance.deleteMany({ where: { importedProductId: id } });
 
-    // Reset candidate status back to CANDIDATE so it can be re-evaluated
-    if (imported.candidateId) {
-      await prisma.candidateProduct.update({
-        where: { id: imported.candidateId },
-        data: { status: 'CANDIDATE' },
-      }).catch(() => {});
-    }
+      // Delete the imported product
+      await tx.importedProduct.delete({ where: { id } });
 
-    // Delete the imported product record (cascades to ProductPerformance)
-    await prisma.importedProduct.delete({ where: { id } });
+      // Reset candidate back to CANDIDATE
+      if (imported.candidateId) {
+        await tx.candidateProduct.update({
+          where: { id: imported.candidateId },
+          data: { status: 'CANDIDATE' },
+        }).catch(() => {});
+      }
+    });
+
+    console.log(`[Import] Successfully deleted "${imported.importedTitle}"`);
 
     await prisma.auditLog.create({
       data: {
@@ -675,10 +685,67 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
         entityId: id,
         explanation: `Deleted "${imported.importedTitle}"`,
       },
-    });
+    }).catch(() => {});
 
     res.json({ success: true, message: 'Product deleted' });
   } catch (err: any) {
+    console.error(`[Import] DELETE FAILED:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete ALL imported products
+router.delete('/imports', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    console.log(`[Import] DELETE ALL for shop ${shopId}`);
+
+    const allImports = await prisma.importedProduct.findMany({
+      where: { shopId },
+      select: { id: true, shopifyProductId: true, shopifyStatus: true, candidateId: true, importedTitle: true },
+    });
+
+    // Delete from Shopify
+    const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
+    if (shop.accessToken && shop.accessToken !== 'pending') {
+      for (const imp of allImports) {
+        if (imp.shopifyProductId && imp.shopifyStatus !== 'MOCK') {
+          try {
+            await fetch(`https://${shop.shopDomain}/admin/api/2024-01/products/${imp.shopifyProductId}.json`, {
+              method: 'DELETE',
+              headers: { 'X-Shopify-Access-Token': shop.accessToken },
+            });
+          } catch {}
+        }
+      }
+    }
+
+    const ids = allImports.map(i => i.id);
+    const candIds = allImports.map(i => i.candidateId).filter(Boolean) as string[];
+
+    // Delete all related records in transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.replacementDecision.deleteMany({ where: { currentProductId: { in: ids } } });
+      await tx.productPin.deleteMany({ where: { importedProductId: { in: ids } } });
+      await tx.productPerformance.deleteMany({ where: { importedProductId: { in: ids } } });
+      await tx.importedProduct.deleteMany({ where: { shopId } });
+      if (candIds.length > 0) {
+        await tx.candidateProduct.updateMany({
+          where: { id: { in: candIds } },
+          data: { status: 'CANDIDATE' },
+        });
+      }
+    });
+
+    console.log(`[Import] Deleted ${allImports.length} imported products`);
+
+    await prisma.auditLog.create({
+      data: { shopId, action: 'ALL_IMPORTS_DELETED', explanation: `Deleted ${allImports.length} products` },
+    }).catch(() => {});
+
+    res.json({ success: true, message: `Deleted ${allImports.length} products` });
+  } catch (err: any) {
+    console.error(`[Import] DELETE ALL FAILED:`, err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
