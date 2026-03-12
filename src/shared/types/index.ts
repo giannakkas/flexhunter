@@ -204,3 +204,163 @@ export interface DashboardStats {
   lastResearchAt: string | null;
   lastSyncAt: string | null;
 }
+
+// ── Agent Results ─────────────────────────────
+
+export interface AgentResult {
+  score: number;
+  confidence: number;
+  reasoning: string;
+  signals: string[];
+}
+
+export interface ViralPrediction {
+  viralScore: number;
+  trendStage: 'early_acceleration' | 'breakout_candidate' | 'rising_trend' | 'stable_trend' | 'saturated' | 'declining';
+  velocity7d: number;
+  accelerationRate: number;
+  confidence: number;
+  signals: string[];
+  explanation: string;
+}
+
+export interface MultiAgentScore {
+  storeFit: AgentResult;
+  profitability: AgentResult;
+  trendPotential: AgentResult;
+  viralPrediction: ViralPrediction;
+  saturation: AgentResult;
+  supplierQuality: AgentResult;
+  finalScore: number;
+  recommendation: 'strong_buy' | 'buy' | 'maybe' | 'skip' | 'avoid';
+  explanation: string;
+}
+
+// ── Product Signals (Feature Store) ───────────
+
+export interface ProductSignals {
+  productId: string;
+  shopId: string;
+  trendVelocity: number;
+  trendStage: string;
+  viralScore: number;
+  googleTrendInterest: number;
+  tiktokViews: number;
+  amazonDemand: number;
+  supplierRating: number;
+  shippingDays: number;
+  shippingScore: number;
+  warehouseCountry: string;
+  hasExpressShipping: boolean;
+  costPrice: number;
+  suggestedPrice: number;
+  marginPercent: number;
+  marginScore: number;
+  profitPerUnit: number;
+  priceInSweetSpot: boolean;
+  saturationScore: number;
+  sellerCount: number;
+  adSaturation: number;
+  storeFitScore: number;
+  domainFitScore: number;
+  audienceFitScore: number;
+  priceBandFit: boolean;
+  reviewRating: number;
+  reviewCount: number;
+  orderVolume: number;
+  evidenceCompleteness: number;
+  signalCount: number;
+  computedAt: string;
+}
+
+// ── Pairwise Ranking ──────────────────────────
+
+export interface PairwiseResult {
+  winnerId: string;
+  loserId: string;
+  winnerTitle: string;
+  loserTitle: string;
+  confidence: number;
+  reason: string;
+  dimensions: {
+    storeFit: 'A' | 'B' | 'tie';
+    profitability: 'A' | 'B' | 'tie';
+    trendPotential: 'A' | 'B' | 'tie';
+    supplierQuality: 'A' | 'B' | 'tie';
+  };
+}
+
+// ── Notifications ─────────────────────────────
+
+export interface Notification {
+  id: string;
+  shopId: string;
+  type: 'info' | 'success' | 'warning' | 'critical';
+  title: string;
+  message: string;
+  action?: { label: string; url: string };
+  read: boolean;
+  createdAt: string;
+}
+
+// ── Trend Data ────────────────────────────────
+
+export interface TrendData {
+  keyword: string;
+  interest: number;
+  change7d: number;
+  change30d: number;
+  isRising: boolean;
+  isBreakout: boolean;
+  relatedQueries: string[];
+}
+
+export interface AggregatedTrend {
+  keyword: string;
+  overallScore: number;
+  trendDirection: 'surging' | 'rising' | 'stable' | 'declining' | 'unknown';
+  signals: string[];
+  confidence: number;
+}
+
+// ── Scoring Trace ─────────────────────────────
+
+export interface ScoringTrace {
+  productId: string;
+  productTitle: string;
+  finalScore: number;
+  recommendation: string;
+  signals: ProductSignals;
+  weights: Record<string, number>;
+  breakdown: { dimension: string; rawScore: number; weight: number; weighted: number }[];
+  confidenceExplanation: string;
+  evidenceCompleteness: string;
+  timestamp: string;
+}
+
+// ── Billing ───────────────────────────────────
+
+export interface Plan {
+  name: string;
+  price: number;
+  researches: number;
+  imports: number;
+}
+
+export type PlanKey = 'free' | 'starter' | 'pro' | 'enterprise';
+
+// ── SEO ───────────────────────────────────────
+
+export interface SeoOptimizationResult {
+  originalTitle: string;
+  optimizedTitle: string;
+  originalDescription: string;
+  optimizedDescription: string;
+  metaTitle: string;
+  metaDescription: string;
+  suggestedKeywords: string[];
+  suggestedHandle: string;
+  altTextSuggestions: string[];
+  suggestedTags: string[];
+  confidence: number;
+}

@@ -1072,6 +1072,64 @@ router.get('/scoring/trace/:candidateId', async (req: Request, res: Response) =>
   }
 });
 
+// ── Pairwise Product Comparison ───────────────
+
+router.post('/scoring/compare', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { productAId, productBId } = req.body;
+    if (!productAId || !productBId) return res.status(400).json({ success: false, error: 'Provide productAId and productBId' });
+
+    const [a, b] = await Promise.all([
+      prisma.candidateProduct.findUniqueOrThrow({ where: { id: productAId }, include: { score: true } }),
+      prisma.candidateProduct.findUniqueOrThrow({ where: { id: productBId }, include: { score: true } }),
+    ]);
+
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+
+    const { compareProducts } = await import('../services/signals/pairwiseRanking');
+    const result = await compareProducts(
+      { id: a.id, title: a.title, score: a.score?.finalScore || 0, price: a.suggestedPrice || 0, cost: a.costPrice || 0, orders: a.orderVolume || 0, rating: a.reviewRating || 0, shippingDays: a.shippingDays || 15, category: a.category || '' },
+      { id: b.id, title: b.title, score: b.score?.finalScore || 0, price: b.suggestedPrice || 0, cost: b.costPrice || 0, orders: b.orderVolume || 0, rating: b.reviewRating || 0, shippingDays: b.shippingDays || 15, category: b.category || '' },
+      settings?.storeDescription || 'dropshipping store',
+    );
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.post('/scoring/tournament', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { topN = 5 } = req.body;
+
+    const candidates = await prisma.candidateProduct.findMany({
+      where: { shopId, status: 'CANDIDATE' },
+      include: { score: true },
+      orderBy: { score: { finalScore: 'desc' } },
+      take: topN * 2,
+    });
+
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+
+    const { tournamentRank } = await import('../services/signals/pairwiseRanking');
+    const result = await tournamentRank(
+      candidates.map(c => ({
+        id: c.id, title: c.title, score: c.score?.finalScore || 0,
+        price: c.suggestedPrice || 0, cost: c.costPrice || 0,
+        orders: c.orderVolume || 0, rating: c.reviewRating || 0,
+        shippingDays: c.shippingDays || 15, category: c.category || '',
+      })),
+      settings?.storeDescription || 'dropshipping store',
+      topN,
+    );
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Trend Intelligence ─────────────────────────
 
 router.post('/trends/analyze', async (req: Request, res: Response) => {
