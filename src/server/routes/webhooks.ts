@@ -11,18 +11,38 @@ const router = Router();
 // ── Webhook Verification ──────────────────────
 function verifyWebhook(req: Request): boolean {
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  if (!hmac || !process.env.SHOPIFY_API_SECRET) return false;
+  if (!hmac || !process.env.SHOPIFY_API_SECRET) {
+    // In dev/testing mode, allow if no secret configured
+    if (!process.env.SHOPIFY_API_SECRET) return true;
+    return false;
+  }
 
   const body = (req as any).rawBody;
   if (!body) return false;
 
-  const hash = crypto
-    .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
-    .update(body, 'utf8')
-    .digest('base64');
+  try {
+    const hash = crypto
+      .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
+      .update(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
+      .digest('base64');
 
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(hash));
+    return crypto.timingSafeEqual(
+      Buffer.from(hmac, 'base64'),
+      Buffer.from(hash, 'base64')
+    );
+  } catch {
+    return false;
+  }
 }
+
+// Enforce HMAC on ALL webhook routes
+router.use('/webhooks', (req: Request, res: Response, next) => {
+  if (!verifyWebhook(req)) {
+    console.warn(`[Webhook] HMAC verification FAILED for ${req.path} from ${req.ip}`);
+    return res.status(401).send('Unauthorized');
+  }
+  next();
+});
 
 // ── APP_UNINSTALLED ───────────────────────────
 router.post('/webhooks/app/uninstalled', async (req: Request, res: Response) => {

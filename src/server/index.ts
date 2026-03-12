@@ -12,6 +12,7 @@ import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import webhookRoutes from './routes/webhooks';
 import billingRoutes from './routes/billing';
+import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
 
 const app = express();
 
@@ -31,19 +32,26 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
+// Security: request timeout (90s for research, 30s for everything else)
+app.use('/api/research', requestTimeout(90_000));
+app.use('/api', requestTimeout(30_000));
+
+// Security: input sanitization
+app.use(sanitizeInput);
+
 // ── Routes ─────────────────────────────────────
 
-// Shopify auth
-app.use('/api/auth', authRoutes);
+// Shopify auth (rate limited: 10/min)
+app.use('/api/auth', authRateLimit, authRoutes);
 
-// Webhooks (before API routes)
+// Webhooks (before API routes, no rate limit — Shopify controls the rate)
 app.use('/api', webhookRoutes);
 
 // Billing
 app.use('/api', billingRoutes);
 
-// API routes
-app.use('/api', apiRoutes);
+// API routes (rate limited: 120/min)
+app.use('/api', apiRateLimit, apiRoutes);
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -98,12 +106,28 @@ if (!config.isDev) {
 
 // ── Error Handler ──────────────────────────────
 
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: config.isDev ? err.message : 'Internal server error',
-  });
+app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const status = err.status || 500;
+  console.error(`[Error] ${req.method} ${req.path} → ${status}: ${err.message}`);
+  if (config.isDev && err.stack) console.error(err.stack);
+
+  if (!res.headersSent) {
+    res.status(status).json({
+      success: false,
+      error: config.isDev ? err.message : 'Internal server error',
+    });
+  }
+});
+
+// Catch unhandled promise rejections
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[FATAL] Unhandled Promise Rejection:', reason?.message || reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught Exception:', err.message);
+  console.error(err.stack);
+  // Don't exit — Railway will restart us if we crash
 });
 
 // ── Start Server ───────────────────────────────

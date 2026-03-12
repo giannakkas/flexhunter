@@ -9,6 +9,7 @@ import enTranslations from '@shopify/polaris/locales/en.json';
 import '@shopify/polaris/build/esm/styles.css';
 
 import { AppFrame } from './components/common/AppFrame';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { DashboardPage } from './pages/DashboardPage';
 import { OnboardingPage } from './pages/OnboardingPage';
 import { CandidatesPage } from './pages/CandidatesPage';
@@ -25,9 +26,11 @@ import { PlansPage } from './pages/PlansPage';
 export default function App() {
   return (
     <AppProvider i18n={enTranslations}>
-      <BrowserRouter>
-        <AppFrame>
-          <Routes>
+      <ErrorBoundary>
+        <BrowserRouter>
+          <AppFrame>
+            <ErrorBoundary>
+              <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
             <Route path="/research" element={<ResearchPage />} />
@@ -41,8 +44,10 @@ export default function App() {
             <Route path="/audit" element={<AuditPage />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
-        </AppFrame>
-      </BrowserRouter>
+            </ErrorBoundary>
+          </AppFrame>
+        </BrowserRouter>
+      </ErrorBoundary>
     </AppProvider>
   );
 }

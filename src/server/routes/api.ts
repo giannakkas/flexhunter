@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../utils/db';
+import { researchRateLimit, seoRateLimit, importRateLimit } from '../middleware/security';
 import {
   enqueueResearch,
   enqueueImport,
@@ -369,7 +370,7 @@ router.post('/domain/analyze', async (req: Request, res: Response) => {
 
 // ── Research ───────────────────────────────────
 
-router.post('/research/start', async (req: Request, res: Response) => {
+router.post('/research/start', researchRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
     console.log(`[Research] POST /research/start for shop ${shopId}`);
@@ -483,7 +484,7 @@ router.get('/candidates/selected-count', async (req: Request, res: Response) => 
   }
 });
 
-router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
+router.post('/candidates/:id/approve', importRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
     const { id } = req.params;
@@ -1147,7 +1148,7 @@ router.post('/fix-token', async (req: Request, res: Response) => {
 
 // ── SEO Optimization ────────────────────────
 
-router.post('/seo/optimize/:importedProductId', async (req: Request, res: Response) => {
+router.post('/seo/optimize/:importedProductId', seoRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
     const { importedProductId } = req.params;
