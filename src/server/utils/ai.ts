@@ -119,7 +119,6 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
     }
     throw err;
   }
-  }
 }
 
 /**
