@@ -4,6 +4,8 @@
 
 import { Router, Request, Response } from 'express';
 import prisma from '../utils/db';
+import cache from '../utils/cache';
+import logger from '../utils/logger';
 import { researchRateLimit, seoRateLimit, importRateLimit } from '../middleware/security';
 import {
   enqueueResearch,
@@ -135,6 +137,10 @@ router.get('/dashboard', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
 
+    // Cache for 30 seconds
+    const cached = await cache.get(`dashboard:${shopId}`);
+    if (cached) return res.json({ success: true, data: cached });
+
     const [candidates, imports, replacements, lastResearch, lastSync] = await Promise.all([
       prisma.candidateProduct.groupBy({
         by: ['status'],
@@ -168,9 +174,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
       _avg: { healthScore: true },
     });
 
-    res.json({
-      success: true,
-      data: {
+    const dashData = {
         totalCandidates: candidateCount,
         totalImported: Object.values(importStatusMap).reduce((a: number, b: any) => a + (b as number), 0),
         totalTesting: importStatusMap['TESTING'] || 0,
@@ -181,8 +185,11 @@ router.get('/dashboard', async (req: Request, res: Response) => {
         avgHealthScore: Math.round(perfAgg._avg.healthScore || 0),
         lastResearchAt: lastResearch?.completedAt || null,
         lastSyncAt: lastSync?.completedAt || null,
-      },
-    });
+    };
+
+    await cache.set(`dashboard:${shopId}`, dashData, 30);
+
+    res.json({ success: true, data: dashData });
   } catch (err: any) {
     console.error('Dashboard error:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -194,7 +201,7 @@ router.get('/dashboard', async (req: Request, res: Response) => {
 router.get('/store-dna', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
-    const dna = await loadStoreDNA(shopId);
+    const dna = await cache.through(`store-dna:${shopId}`, 60, () => loadStoreDNA(shopId));
     res.json({ success: true, data: dna });
   } catch (err: any) {
     res.json({ success: true, data: null });
@@ -227,6 +234,7 @@ router.put('/store-dna', async (req: Request, res: Response) => {
       await prisma.merchantSettings.update({ where: { shopId }, data: settingsFields });
     }
 
+    await cache.del(`store-dna:${shopId}`);
     res.json({ success: true, message: 'DNA updated' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -262,6 +270,7 @@ router.post('/store-dna/simple-save', async (req: Request, res: Response) => {
       },
     });
 
+    await cache.del(`store-dna:${shopId}`);
     res.json({ success: true, message: 'Saved' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
@@ -392,6 +401,9 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     }).catch(() => {});
 
     console.log(`[Research] Completed: ${result.totalSaved} products saved`);
+    logger.info('Research complete', { shopId, saved: result.totalSaved, fetched: result.totalFetched });
+    await cache.invalidatePrefix(`dashboard:${shopId}`);
+    await cache.invalidatePrefix(`candidates:${shopId}`);
     res.json({ success: true, message: 'Research complete', data: result });
   } catch (err: any) {
     console.error('[Research] FAILED:', err.message, err.stack);
@@ -419,6 +431,11 @@ router.get('/candidates', async (req: Request, res: Response) => {
     const shopId = await getOrCreateShop(req);
     const { status, sort, page = '1', limit = '200' } = req.query;
 
+    // Cache for 15 seconds
+    const cacheKey = `candidates:${shopId}:${status}:${sort}:${page}`;
+    const cached = await cache.get(cacheKey);
+    if (cached) return res.json(cached);
+
     const where: any = { shopId };
     if (status) where.status = status;
 
@@ -432,11 +449,13 @@ router.get('/candidates', async (req: Request, res: Response) => {
 
     const total = await prisma.candidateProduct.count({ where });
 
-    res.json({
+    const response = {
       success: true,
       data: candidates,
       meta: { page: parseInt(page as string), total, hasMore: total > parseInt(page as string) * parseInt(limit as string) },
-    });
+    };
+    await cache.set(cacheKey, response, 15);
+    res.json(response);
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -581,6 +600,9 @@ router.post('/candidates/:id/approve', importRateLimit, async (req: Request, res
         explanation: `Imported "${finalTitle}" (${isMock ? 'mock' : 'Shopify'})`,
       },
     });
+
+    logger.info('Product imported', { shopId, title: finalTitle, mock: isMock });
+    await cache.invalidatePrefix(`dashboard:${shopId}`);
 
     res.json({
       success: true,

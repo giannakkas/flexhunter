@@ -13,6 +13,7 @@ import apiRoutes from './routes/api';
 import webhookRoutes from './routes/webhooks';
 import billingRoutes from './routes/billing';
 import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
+import logger from './utils/logger';
 
 const app = express();
 
@@ -31,6 +32,9 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
+
+// Structured request logging
+app.use(logger.requestLogger());
 
 // Security: request timeout (90s for research, 30s for everything else)
 app.use('/api/research', requestTimeout(90_000));
@@ -54,8 +58,21 @@ app.use('/api', billingRoutes);
 app.use('/api', apiRateLimit, apiRoutes);
 
 // Health check
-app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+  const { default: cache } = await import('./utils/cache');
+  res.json({
+    status: 'ok',
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+    uptime: Math.round(process.uptime()),
+    cache: cache.isRedisAvailable() ? 'redis' : 'memory',
+    ai: process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
+    providers: {
+      aliexpress: !!process.env.RAPIDAPI_KEY,
+      cj: !!process.env.CJ_API_KEY,
+      trends: !!process.env.RAPIDAPI_KEY,
+    },
+  });
 });
 
 // Direct token setup page - visit /setup in browser
@@ -108,7 +125,7 @@ if (!config.isDev) {
 
 app.use((err: any, req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const status = err.status || 500;
-  console.error(`[Error] ${req.method} ${req.path} → ${status}: ${err.message}`);
+  logger.error('Unhandled request error', { method: req.method, path: req.path, status, error: err.message });
   if (config.isDev && err.stack) console.error(err.stack);
 
   if (!res.headersSent) {
@@ -119,26 +136,38 @@ app.use((err: any, req: express.Request, res: express.Response, _next: express.N
   }
 });
 
-// Catch unhandled promise rejections
 process.on('unhandledRejection', (reason: any) => {
-  console.error('[FATAL] Unhandled Promise Rejection:', reason?.message || reason);
+  logger.fatal('Unhandled Promise Rejection', { error: reason?.message || String(reason) });
 });
 
 process.on('uncaughtException', (err) => {
-  console.error('[FATAL] Uncaught Exception:', err.message);
-  console.error(err.stack);
-  // Don't exit — Railway will restart us if we crash
+  logger.fatal('Uncaught Exception', { error: err.message, stack: err.stack });
 });
 
 // ── Start Server ───────────────────────────────
 
-app.listen(config.port, () => {
+app.listen(config.port, async () => {
+  const { default: cache } = await import('./utils/cache');
+
+  logger.info('FlexHunter server started', {
+    port: config.port,
+    env: config.nodeEnv,
+    ai: process.env.GEMINI_API_KEY ? 'Gemini 2.0 Flash' : process.env.OPENAI_API_KEY ? 'OpenAI' : 'none',
+    cache: cache.isRedisAvailable() ? 'Redis' : 'in-memory',
+    providers: [
+      process.env.RAPIDAPI_KEY ? 'AliExpress' : null,
+      process.env.CJ_API_KEY ? 'CJ Dropshipping' : null,
+    ].filter(Boolean).join(', ') || 'none',
+  });
+
   console.log(`
 ╔══════════════════════════════════════════╗
-║          FlexHunter Server v1.0          ║
+║        FlexHunter Server v2.0           ║
 ║──────────────────────────────────────────║
 ║  Port:     ${config.port}                          ║
 ║  Env:      ${config.nodeEnv.padEnd(28)}║
+║  AI:       ${(process.env.GEMINI_API_KEY ? 'Gemini 2.0 Flash' : 'OpenAI/None').padEnd(28)}║
+║  Cache:    ${(cache.isRedisAvailable() ? 'Redis' : 'In-Memory').padEnd(28)}║
 ║  Shopify:  ${config.shopify.appUrl ? '✓ configured' : '✗ missing'}                    ║
 ╚══════════════════════════════════════════╝
   `);
