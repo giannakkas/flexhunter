@@ -1005,6 +1005,34 @@ router.post('/replacements/scan', async (req: Request, res: Response) => {
   }
 });
 
+// ── Trend Intelligence ─────────────────────────
+
+router.post('/trends/analyze', async (req: Request, res: Response) => {
+  try {
+    const { keywords } = req.body;
+    if (!keywords || !Array.isArray(keywords) || keywords.length === 0) {
+      return res.status(400).json({ success: false, error: 'Provide an array of keywords' });
+    }
+
+    const { batchAggregateTrends } = await import('../services/trends');
+    const trends = await batchAggregateTrends(keywords.slice(0, 10));
+    res.json({ success: true, data: trends });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.get('/trends/keyword/:keyword', async (req: Request, res: Response) => {
+  try {
+    const { keyword } = req.params;
+    const { aggregateTrend } = await import('../services/trends');
+    const trend = await aggregateTrend(keyword);
+    res.json({ success: true, data: trend });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Audit Logs ─────────────────────────────────
 
 router.get('/audit', async (req: Request, res: Response) => {

@@ -22,6 +22,7 @@ import { ResearchPage } from './pages/ResearchPage';
 
 import { SeoPage } from './pages/SeoPage';
 import { PlansPage } from './pages/PlansPage';
+import { TrendsPage } from './pages/TrendsPage';
 
 export default function App() {
   return (
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/imports" element={<ImportsPage />} />
             <Route path="/seo" element={<SeoPage />} />
             <Route path="/plans" element={<PlansPage />} />
+            <Route path="/trends" element={<TrendsPage />} />
             <Route path="/replacements" element={<ReplacementsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/audit" element={<AuditPage />} />

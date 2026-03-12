@@ -109,6 +109,39 @@ Return JSON:
     if (aiPrediction.isGiftWorthy) signals.push('Gift-worthy — strong seasonal potential');
   }
 
+  // ── External Trend Data (if available) ──────
+  // Try to get real trend data for the product category/title keywords
+  try {
+    const { aggregateTrend } = await import('../trends');
+    // Extract 2-3 key words from title for trend search
+    const searchTerms = product.title
+      .replace(/[^a-zA-Z\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 3)
+      .slice(0, 3)
+      .join(' ');
+
+    if (searchTerms.length > 5) {
+      const trend = await aggregateTrend(searchTerms);
+      if (trend.confidence > 0) {
+        // Blend external trend score (up to +20 or -10)
+        const trendBoost = Math.round((trend.overallScore - 40) * 0.5);
+        viralScore += trendBoost;
+        signals.push(...trend.signals.slice(0, 2));
+
+        if (trend.trendDirection === 'surging') {
+          viralScore += 10;
+          signals.push('🌊 Multi-platform surging trend');
+        } else if (trend.trendDirection === 'declining') {
+          viralScore -= 10;
+          signals.push('📉 Declining across platforms');
+        }
+      }
+    }
+  } catch {
+    // Trends enrichment is optional — don't fail the whole agent
+  }
+
   viralScore = Math.min(100, Math.max(0, viralScore));
 
   // Determine trend stage
