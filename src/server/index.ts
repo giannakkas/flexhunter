@@ -14,6 +14,7 @@ import webhookRoutes from './routes/webhooks';
 import billingRoutes from './routes/billing';
 import adminRoutes from './routes/admin';
 import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
+import { apiMetricsMiddleware } from './middleware/apiMetrics';
 import logger from './utils/logger';
 
 const app = express();
@@ -36,6 +37,9 @@ app.use(cookieParser());
 
 // Structured request logging
 app.use(logger.requestLogger());
+
+// API metrics collection
+app.use('/api', apiMetricsMiddleware());
 
 // Security: request timeout (90s for research, 30s for everything else)
 app.use('/api/research', requestTimeout(90_000));

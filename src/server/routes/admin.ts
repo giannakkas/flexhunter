@@ -9,6 +9,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../utils/db';
 import cache from '../utils/cache';
 import logger from '../utils/logger';
+import { getApiMetrics, getApiTimeline } from '../middleware/apiMetrics';
 
 const router = Router();
 
@@ -275,6 +276,16 @@ router.post('/shops/:id/deactivate', async (req: Request, res: Response) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── API Monitoring ────────────────────────────
+router.get('/api-metrics', (_req: Request, res: Response) => {
+  res.json(getApiMetrics());
+});
+
+router.get('/api-timeline', (req: Request, res: Response) => {
+  const bucket = parseInt(req.query.bucket as string) || 5;
+  res.json(getApiTimeline(bucket));
 });
 
 export default router;

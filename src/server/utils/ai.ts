@@ -6,6 +6,11 @@
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
 
+// External API tracker (lazy import to avoid circular deps)
+function trackApi(name: string, success: boolean, latency: number, error?: string) {
+  try { const { trackExternalApi } = require('../middleware/apiMetrics'); trackExternalApi(name, success, latency, error); } catch {}
+}
+
 export interface AICompletionOptions {
   model?: string;
   temperature?: number;
@@ -21,6 +26,7 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
   if (!apiKey) throw new Error('GEMINI_API_KEY not set');
 
   const { temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
+  const start = Date.now();
 
   const contents: any[] = [];
   if (systemPrompt) {
@@ -29,33 +35,41 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
   }
   contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-  const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents,
-      generationConfig: {
-        temperature,
-        maxOutputTokens: maxTokens,
-        responseMimeType: 'application/json',
-      },
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // Parse JSON
   try {
-    const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return JSON.parse(cleaned) as T;
-  } catch {
-    return text as T;
+    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          temperature,
+          maxOutputTokens: maxTokens,
+          responseMimeType: 'application/json',
+        },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      trackApi('Gemini AI', false, Date.now() - start, `${res.status}: ${err.slice(0, 100)}`);
+      throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    trackApi('Gemini AI', true, Date.now() - start);
+
+    try {
+      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned) as T;
+    } catch {
+      return text as T;
+    }
+  } catch (err: any) {
+    if (!err.message.includes('Gemini API error')) {
+      trackApi('Gemini AI', false, Date.now() - start, err.message);
+    }
+    throw err;
   }
 }
 
@@ -67,33 +81,44 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
   if (!apiKey) throw new Error('No AI API key configured (set GEMINI_API_KEY or OPENAI_API_KEY)');
 
   const { model = 'gpt-4o-mini', temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
+  const start = Date.now();
 
   const messages: any[] = [];
   if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
   messages.push({ role: 'user', content: prompt });
 
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`OpenAI API error ${res.status}: ${err.slice(0, 200)}`);
-  }
-
-  const data = await res.json();
-  const content = data.choices?.[0]?.message?.content || '';
-
   try {
-    const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    return JSON.parse(cleaned) as T;
-  } catch {
-    return content as T;
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      trackApi('OpenAI', false, Date.now() - start, `${res.status}`);
+      throw new Error(`OpenAI API error ${res.status}: ${err.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    trackApi('OpenAI', true, Date.now() - start);
+
+    try {
+      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      return JSON.parse(cleaned) as T;
+    } catch {
+      return content as T;
+    }
+  } catch (err: any) {
+    if (!err.message.includes('OpenAI API error')) {
+      trackApi('OpenAI', false, Date.now() - start, err.message);
+    }
+    throw err;
+  }
   }
 }
 

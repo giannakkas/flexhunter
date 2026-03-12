@@ -117,9 +117,18 @@ export class ProviderRegistry {
 
   async searchAll(params: ProviderSearchParams): Promise<NormalizedProduct[]> {
     const available = this.getAvailable();
-    console.log(`[Registry] Searching ${available.length} live providers: ${available.map(p => p.name).join(', ')}`);
     const results = await Promise.allSettled(
-      available.map((p) => p.searchProducts(params))
+      available.map(async (p) => {
+        const start = Date.now();
+        try {
+          const products = await p.searchProducts(params);
+          try { const { trackExternalApi } = require('../../middleware/apiMetrics'); trackExternalApi(p.name, true, Date.now() - start); } catch {}
+          return products;
+        } catch (err: any) {
+          try { const { trackExternalApi } = require('../../middleware/apiMetrics'); trackExternalApi(p.name, false, Date.now() - start, err.message); } catch {}
+          throw err;
+        }
+      })
     );
 
     return results
