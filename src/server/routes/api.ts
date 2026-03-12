@@ -978,10 +978,6 @@ router.post('/replacements/scan', async (req: Request, res: Response) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
-  } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
 // ── Audit Logs ─────────────────────────────────
 
