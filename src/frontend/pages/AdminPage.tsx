@@ -28,6 +28,7 @@ export function AdminPage() {
   const [shops, setShops] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [apiMetrics, setApiMetrics] = useState<any>(null);
+  const [apiHealth, setApiHealth] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
@@ -39,14 +40,15 @@ export function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [ov, sh, st, am] = await Promise.all([
+      const [ov, sh, st, am, ah] = await Promise.all([
         fetch('/api/admin/overview', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/shops', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/stats', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/api-metrics', { headers: headers() }).then(r => r.json()),
+        fetch('/api/admin/api-health', { headers: headers() }).then(r => r.json()),
       ]);
       if (ov.error) throw new Error(ov.error);
-      setOverview(ov); setShops(sh.shops || []); setStats(st); setApiMetrics(am);
+      setOverview(ov); setShops(sh.shops || []); setStats(st); setApiMetrics(am); setApiHealth(ah);
       setAuthed(true);
       localStorage.setItem('admin_secret', secret);
     } catch (e: any) { setError(e.message); setAuthed(false); }
@@ -126,6 +128,61 @@ export function AdminPage() {
           {tab === 0 && (
             <BlockStack gap="400">
               <div style={{ height: 12 }} />
+
+              {/* API & Service Health */}
+              {apiHealth?.apis && (
+                <Card>
+                  <BlockStack gap="300">
+                    <InlineStack align="space-between">
+                      <Text as="h2" variant="headingSm">🔌 API & Service Health — Live Status</Text>
+                      <InlineStack gap="200">
+                        <Badge tone="success">{apiHealth.summary?.healthy || 0} Healthy</Badge>
+                        {apiHealth.summary?.errors > 0 && <Badge tone="critical">{apiHealth.summary.errors} Failing</Badge>}
+                        {apiHealth.summary?.notConfigured > 0 && <Badge tone="attention">{apiHealth.summary.notConfigured} Not Set</Badge>}
+                      </InlineStack>
+                    </InlineStack>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: '#F9FAFB' }}>
+                            {['Service', 'Status', 'Latency', 'Details', 'Key Set'].map(h => (
+                              <th key={h} style={{ padding: '8px 12px', fontWeight: 600, color: '#374151', borderBottom: '2px solid #E5E7EB', textAlign: 'left' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {apiHealth.apis.map((api: any, i: number) => (
+                            <tr key={i} style={{
+                              borderBottom: '1px solid #F3F4F6',
+                              background: api.status === 'error' ? '#FEF2F2' : api.status === 'not_configured' ? '#FFFBEB' : 'transparent',
+                            }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 600 }}>{api.name}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                {api.status === 'healthy' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#059669', fontWeight: 700, fontSize: 12 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />HEALTHY</span>}
+                                {api.status === 'error' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#DC2626', fontWeight: 700, fontSize: 12 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#EF4444', display: 'inline-block' }} />ERROR</span>}
+                                {api.status === 'not_configured' && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: '#D97706', fontWeight: 700, fontSize: 12 }}><span style={{ width: 10, height: 10, borderRadius: '50%', background: '#F59E0B', display: 'inline-block' }} />NOT SET</span>}
+                              </td>
+                              <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontSize: 12 }}>
+                                {api.latency > 0 ? `${api.latency}ms` : '—'}
+                              </td>
+                              <td style={{ padding: '10px 12px', fontSize: 12, maxWidth: 350, color: api.status === 'error' ? '#DC2626' : '#374151' }}>
+                                {api.detail}
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                                {api.configured ? <span style={{ color: '#10B981', fontSize: 16 }}>✓</span> : <span style={{ color: '#EF4444', fontSize: 16 }}>✗</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {apiHealth.checkedAt && (
+                      <Text as="p" variant="bodySm" tone="subdued">Last checked: {new Date(apiHealth.checkedAt).toLocaleString()}</Text>
+                    )}
+                  </BlockStack>
+                </Card>
+              )}
+
               <InlineGrid columns={5} gap="200">
                 <StatBox icon="🏪" label="Shops" value={counts.shops || 0} color="#3B82F6" />
                 <StatBox icon="🔍" label="Candidates" value={counts.candidates || 0} color="#8B5CF6" />

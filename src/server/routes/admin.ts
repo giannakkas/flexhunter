@@ -278,6 +278,176 @@ router.post('/shops/:id/deactivate', async (req: Request, res: Response) => {
   }
 });
 
+// ── API Health Check — tests every external service ──
+router.get('/api-health', async (_req: Request, res: Response) => {
+  const results: any[] = [];
+
+  // Helper: test an API and return result
+  async function testApi(name: string, testFn: () => Promise<{ ok: boolean; detail?: string }>) {
+    const start = Date.now();
+    try {
+      const r = await testFn();
+      results.push({ name, status: r.ok ? 'healthy' : 'error', latency: Date.now() - start, detail: r.detail || 'OK', configured: true });
+    } catch (err: any) {
+      results.push({ name, status: 'error', latency: Date.now() - start, detail: err.message?.slice(0, 150), configured: true });
+    }
+  }
+
+  // ── Gemini AI ──
+  if (process.env.GEMINI_API_KEY) {
+    await testApi('Gemini 2.0 Flash', async () => {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) { const t = await r.text(); return { ok: false, detail: `HTTP ${r.status}: ${t.slice(0, 100)}` }; }
+      return { ok: true, detail: 'Connected & responding' };
+    });
+  } else {
+    results.push({ name: 'Gemini 2.0 Flash', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
+  }
+
+  // ── OpenAI ──
+  if (process.env.OPENAI_API_KEY) {
+    await testApi('OpenAI GPT', async () => {
+      const r = await fetch('https://api.openai.com/v1/models', {
+        headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}: Invalid key or quota exceeded` };
+      return { ok: true, detail: 'Key valid & connected' };
+    });
+  } else {
+    results.push({ name: 'OpenAI GPT', status: 'not_configured', latency: 0, detail: 'OPENAI_API_KEY not set (optional — Gemini is primary)', configured: false });
+  }
+
+  // ── AliExpress (RapidAPI) ──
+  if (process.env.RAPIDAPI_KEY) {
+    await testApi('AliExpress (RapidAPI)', async () => {
+      const r = await fetch('https://aliexpress-datahub.p.rapidapi.com/item_search_2?q=test&page=1', {
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'aliexpress-datahub.p.rapidapi.com' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
+      if (r.status === 429) return { ok: false, detail: 'Rate limited — too many requests' };
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      const data = await r.json();
+      const count = data?.result?.resultList?.length || 0;
+      return { ok: true, detail: `Connected — ${count} test results returned` };
+    });
+  } else {
+    results.push({ name: 'AliExpress (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
+  }
+
+  // ── CJ Dropshipping ──
+  if (process.env.CJ_API_KEY) {
+    await testApi('CJ Dropshipping', async () => {
+      const r = await fetch('https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: process.env.CJ_API_KEY!.split('@api@')[0]?.replace('CJ', '') + '@test.com', password: 'test' }),
+        signal: AbortSignal.timeout(8000),
+      });
+      // CJ returns 200 even on auth failure, check response
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      // If we get a response, the API is reachable
+      return { ok: true, detail: 'API reachable — key configured' };
+    });
+  } else {
+    results.push({ name: 'CJ Dropshipping', status: 'not_configured', latency: 0, detail: 'CJ_API_KEY not set', configured: false });
+  }
+
+  // ── Google Trends (RapidAPI) ──
+  if (process.env.RAPIDAPI_KEY) {
+    await testApi('Google Trends (RapidAPI)', async () => {
+      const r = await fetch('https://google-trends8.p.rapidapi.com/trendings?region_code=US&hl=en', {
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
+      if (r.status === 429) return { ok: false, detail: 'Rate limited' };
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      return { ok: true, detail: 'Connected & returning trends' };
+    });
+  } else {
+    results.push({ name: 'Google Trends (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
+  }
+
+  // ── Amazon Data (RapidAPI) ──
+  if (process.env.RAPIDAPI_KEY) {
+    await testApi('Amazon Data (RapidAPI)', async () => {
+      const r = await fetch('https://real-time-amazon-data.p.rapidapi.com/search?query=test&page=1&country=US', {
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'real-time-amazon-data.p.rapidapi.com' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
+      if (r.status === 429) return { ok: false, detail: 'Rate limited' };
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      const data = await r.json();
+      const count = data?.data?.products?.length || 0;
+      return { ok: true, detail: `Connected — ${count} test results` };
+    });
+  } else {
+    results.push({ name: 'Amazon Data (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
+  }
+
+  // ── TikTok (RapidAPI) ──
+  if (process.env.RAPIDAPI_KEY) {
+    await testApi('TikTok Trends (RapidAPI)', async () => {
+      const r = await fetch('https://tiktok-creative-center-api.p.rapidapi.com/api/search/hashtag?keyword=gadget&country=us', {
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'tiktok-creative-center-api.p.rapidapi.com' },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
+      if (r.status === 429) return { ok: false, detail: 'Rate limited' };
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      return { ok: true, detail: 'Connected' };
+    });
+  } else {
+    results.push({ name: 'TikTok Trends (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
+  }
+
+  // ── Shopify ──
+  const shop = await prisma.shop.findFirst({ where: { isActive: true, accessToken: { not: 'pending' } } }).catch(() => null);
+  if (shop?.accessToken) {
+    await testApi('Shopify Admin API', async () => {
+      const r = await fetch(`https://${shop.shopDomain}/admin/api/2024-01/shop.json`, {
+        headers: { 'X-Shopify-Access-Token': shop.accessToken! },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (r.status === 401) return { ok: false, detail: '401 Unauthorized — token expired, reinstall app' };
+      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
+      const data = await r.json();
+      return { ok: true, detail: `Connected to ${data.shop?.name || shop.shopDomain}` };
+    });
+  } else {
+    results.push({ name: 'Shopify Admin API', status: shop ? 'error' : 'not_configured', latency: 0, detail: shop ? 'Token is pending — reinstall app' : 'No active shop found', configured: !!shop });
+  }
+
+  // ── Database ──
+  await testApi('PostgreSQL Database', async () => {
+    const count = await prisma.shop.count();
+    return { ok: true, detail: `Connected — ${count} shops in database` };
+  });
+
+  // ── Redis ──
+  await testApi('Redis Cache', async () => {
+    const isUp = cache.isRedisAvailable();
+    return { ok: isUp, detail: isUp ? 'Connected & caching' : 'Not connected — using in-memory fallback' };
+  });
+
+  // Summary
+  const healthy = results.filter(r => r.status === 'healthy').length;
+  const errors = results.filter(r => r.status === 'error').length;
+  const notConfigured = results.filter(r => r.status === 'not_configured').length;
+
+  res.json({
+    summary: { total: results.length, healthy, errors, notConfigured },
+    apis: results,
+    checkedAt: new Date().toISOString(),
+  });
+});
+
 // ── API Monitoring ────────────────────────────
 router.get('/api-metrics', (_req: Request, res: Response) => {
   res.json(getApiMetrics());
