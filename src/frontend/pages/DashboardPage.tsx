@@ -295,19 +295,33 @@ export function DashboardPage() {
                 </div>
                 <span style={{ color: '#9CA3AF' }}>→</span>
               </button>
-              <button onClick={() => navigate('/seo')} style={actionBtnStyle('#10B981', '#ECFDF5')}>
+              <button onClick={async () => {
+                const r = await apiFetch<any>('/performance/sync', { method: 'POST' }).catch(() => null);
+                if (r) { getDash('/dashboard'); }
+              }} style={actionBtnStyle('#10B981', '#ECFDF5')}>
+                <span style={{ fontSize: 18 }}>📊</span>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Sync Performance</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Update product health from Shopify</div>
+                </div>
+                <span style={{ color: '#9CA3AF' }}>→</span>
+              </button>
+              <button onClick={async () => {
+                await apiFetch<any>('/replacements/scan', { method: 'POST' }).catch(() => null);
+                navigate('/replacements');
+              }} style={actionBtnStyle('#EF4444', '#FEF2F2')}>
+                <span style={{ fontSize: 18 }}>🔄</span>
+                <div style={{ flex: 1, textAlign: 'left' }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>Scan Replacements</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>{d.totalWeak} weak products detected</div>
+                </div>
+                <span style={{ color: '#9CA3AF' }}>→</span>
+              </button>
+              <button onClick={() => navigate('/seo')} style={actionBtnStyle('#F59E0B', '#FFFBEB')}>
                 <span style={{ fontSize: 18 }}>✨</span>
                 <div style={{ flex: 1, textAlign: 'left' }}>
                   <div style={{ fontWeight: 700, fontSize: 13 }}>SEO Optimizer</div>
                   <div style={{ fontSize: 11, color: '#6B7280' }}>Boost product rankings</div>
-                </div>
-                <span style={{ color: '#9CA3AF' }}>→</span>
-              </button>
-              <button onClick={() => navigate('/settings')} style={actionBtnStyle('#F59E0B', '#FFFBEB')}>
-                <span style={{ fontSize: 18 }}>⚙️</span>
-                <div style={{ flex: 1, textAlign: 'left' }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>Settings</div>
-                  <div style={{ fontSize: 11, color: '#6B7280' }}>Automation & thresholds</div>
                 </div>
                 <span style={{ color: '#9CA3AF' }}>→</span>
               </button>

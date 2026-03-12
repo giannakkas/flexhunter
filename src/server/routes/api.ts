@@ -861,10 +861,30 @@ router.get('/replacements', async (req: Request, res: Response) => {
     const shopId = await getOrCreateShop(req);
     const decisions = await prisma.replacementDecision.findMany({
       where: { shopId },
-      include: { currentProduct: true },
+      include: {
+        currentProduct: {
+          include: {
+            performance: true,
+            candidate: { select: { imageUrls: true, category: true } },
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
-    res.json({ success: true, data: decisions });
+
+    // Fetch replacement candidates separately (no FK relation in schema)
+    const enriched = await Promise.all(decisions.map(async (d) => {
+      let replacementCandidate = null;
+      if (d.replacementCandidateId) {
+        replacementCandidate = await prisma.candidateProduct.findUnique({
+          where: { id: d.replacementCandidateId },
+          select: { id: true, title: true, imageUrls: true, suggestedPrice: true, costPrice: true, orderVolume: true, category: true, sourceName: true },
+        }).catch(() => null);
+      }
+      return { ...d, replacementCandidate };
+    }));
+
+    res.json({ success: true, data: enriched });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }

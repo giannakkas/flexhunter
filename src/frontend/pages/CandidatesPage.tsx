@@ -44,6 +44,18 @@ function ScoreCircle({ value, size = 40 }: { value: number; size?: number }) {
   );
 }
 
+function ViralBadge({ score }: { score?: number }) {
+  if (!score || score < 40) return null;
+  let label: string, bg: string, color: string, icon: string;
+  if (score >= 80) { icon = '🔥'; label = 'Early Viral'; bg = '#FEE2E2'; color = '#B91C1C'; }
+  else if (score >= 65) { icon = '🚀'; label = 'Breakout'; bg = '#FFF7ED'; color = '#C2410C'; }
+  else if (score >= 50) { icon = '📈'; label = 'Rising'; bg = '#FEF9C3'; color = '#A16207'; }
+  else { icon = '📊'; label = 'Trending'; bg = '#EFF6FF'; color = '#1D4ED8'; }
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 10, background: bg, color, whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 3 }}>{icon} {label}</span>
+  );
+}
+
 function RecBadge({ score, fitScore }: { score: number; fitScore?: number }) {
   const fit = fitScore || score;
   let label: string, bg: string, color: string;
@@ -98,7 +110,7 @@ function ScorePanel({ item, onClose }: { item: any; onClose: () => void }) {
             <ScoreBar label="🏪 Store Fit" value={s.storeFit} color="#5C6AC4" />
             <ScoreBar label="👥 Audience" value={s.audienceFit} color="#007ACE" />
             <ScoreBar label="📈 Trend" value={s.trendFit} color="#007ACE" />
-            <ScoreBar label="📸 Virality" value={s.visualVirality} color="#9C6ADE" />
+            <ScoreBar label="🔥 Viral Potential" value={s.visualVirality} color="#DC2626" />
             <ScoreBar label="✨ Novelty" value={s.novelty} color="#9C6ADE" />
             <ScoreBar label="💰 Price Fit" value={s.priceFit} color="#008060" />
             <ScoreBar label="📊 Margin Fit" value={s.marginFit} color="#008060" />
@@ -257,6 +269,7 @@ export function CandidatesPage() {
                     <Badge>{item.category || 'General'}</Badge>
                     {item.warehouseCountry && <Badge tone="info">{item.warehouseCountry}</Badge>}
                     <RecBadge score={fs} fitScore={s?.domainFit} />
+                    <ViralBadge score={s?.visualVirality} />
                   </InlineStack>
                 </BlockStack>
 

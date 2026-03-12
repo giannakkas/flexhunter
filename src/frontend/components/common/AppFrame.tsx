@@ -44,11 +44,13 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         title="Optimize"
         items={[
           { label: 'SEO Optimizer', icon: SearchIcon, onClick: () => navigate('/seo'), selected: location.pathname.startsWith('/seo') },
+          { label: 'Replacements', icon: RefreshIcon, onClick: () => navigate('/replacements'), selected: location.pathname === '/replacements' },
         ]}
       />
       <Navigation.Section
         title="System"
         items={[
+          { label: 'Plans & Pricing', icon: HomeIcon, onClick: () => navigate('/plans'), selected: location.pathname === '/plans' },
           { label: 'Settings', icon: SettingsIcon, onClick: () => navigate('/settings'), selected: location.pathname === '/settings' },
           { label: 'Audit Log', icon: ListBulletedIcon, onClick: () => navigate('/audit'), selected: location.pathname === '/audit' },
         ]}
