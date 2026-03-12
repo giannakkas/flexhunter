@@ -137,17 +137,6 @@ export function PlansPage() {
           })}
         </InlineGrid>
 
-        <Card>
-          <BlockStack gap="200">
-            <Text as="h2" variant="headingSm">All plans include</Text>
-            <InlineStack gap="400">
-              {['Shopify embedded app', 'Gemini AI engine', 'Product import with images', 'Store DNA analysis', 'Audit log'].map(f => (
-                <Badge key={f} tone="success">{f}</Badge>
-              ))}
-            </InlineStack>
-          </BlockStack>
-        </Card>
-
         <div style={{ height: 80 }} />
       </BlockStack>
     </Page>
