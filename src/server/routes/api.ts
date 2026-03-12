@@ -404,6 +404,15 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     logger.info('Research complete', { shopId, saved: result.totalSaved, fetched: result.totalFetched });
     await cache.invalidatePrefix(`dashboard:${shopId}`);
     await cache.invalidatePrefix(`candidates:${shopId}`);
+
+    // Notify merchant
+    try {
+      const { notify } = await import('../services/notifications');
+      await notify(shopId, 'success', `Research found ${result.totalSaved} products`,
+        `AI analyzed ${result.totalFetched} products and selected ${result.totalSaved} winners for your store.`,
+        { label: 'View Products', url: '/candidates' });
+    } catch {}
+
     res.json({ success: true, message: 'Research complete', data: result });
   } catch (err: any) {
     console.error('[Research] FAILED:', err.message, err.stack);
@@ -1389,6 +1398,44 @@ router.post('/provider-request', async (req: Request, res: Response) => {
 });
 
 // ── Jobs ───────────────────────────────────────
+
+// ── Notifications ─────────────────────────────
+
+router.get('/notifications', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { getNotifications } = await import('../services/notifications');
+    const notifications = await getNotifications(shopId);
+    res.json({ success: true, data: notifications });
+  } catch { res.json({ success: true, data: [] }); }
+});
+
+router.get('/notifications/unread', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { getUnreadCount } = await import('../services/notifications');
+    const count = await getUnreadCount(shopId);
+    res.json({ success: true, data: { count } });
+  } catch { res.json({ success: true, data: { count: 0 } }); }
+});
+
+router.post('/notifications/:id/read', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { markRead } = await import('../services/notifications');
+    await markRead(shopId, req.params.id);
+    res.json({ success: true });
+  } catch { res.json({ success: true }); }
+});
+
+router.post('/notifications/read-all', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { markAllRead } = await import('../services/notifications');
+    await markAllRead(shopId);
+    res.json({ success: true });
+  } catch { res.json({ success: true }); }
+});
 
 router.get('/jobs', async (req: Request, res: Response) => {
   try {

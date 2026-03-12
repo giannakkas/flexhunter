@@ -23,6 +23,7 @@ import { ResearchPage } from './pages/ResearchPage';
 import { SeoPage } from './pages/SeoPage';
 import { PlansPage } from './pages/PlansPage';
 import { TrendsPage } from './pages/TrendsPage';
+import { AdminPage } from './pages/AdminPage';
 
 export default function App() {
   return (
@@ -44,6 +45,7 @@ export default function App() {
             <Route path="/replacements" element={<ReplacementsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/audit" element={<AuditPage />} />
+            <Route path="/admin" element={<AdminPage />} />
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
             </ErrorBoundary>

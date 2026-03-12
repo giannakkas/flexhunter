@@ -123,6 +123,15 @@ router.get('/callback', async (req: Request, res: Response) => {
 
     console.log(`[Auth] Token saved for ${shop} and all matching shops`);
 
+    // Auto-register webhooks
+    try {
+      const { registerWebhooks } = await import('../services/scheduler');
+      const registered = await registerWebhooks(shop as string, accessToken);
+      console.log(`[Auth] Webhooks registered: ${registered.join(', ')}`);
+    } catch (err: any) {
+      console.warn(`[Auth] Webhook registration failed: ${err.message}`);
+    }
+
     // Redirect to app
     res.redirect(`https://${shop}/admin/apps/${config.shopify.apiKey}`);
   } catch (err) {

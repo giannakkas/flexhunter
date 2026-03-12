@@ -12,6 +12,7 @@ import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import webhookRoutes from './routes/webhooks';
 import billingRoutes from './routes/billing';
+import adminRoutes from './routes/admin';
 import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
 import logger from './utils/logger';
 
@@ -53,6 +54,9 @@ app.use('/api', webhookRoutes);
 
 // Billing
 app.use('/api', billingRoutes);
+
+// Admin panel (protected by ADMIN_SECRET)
+app.use('/api/admin', adminRoutes);
 
 // API routes (rate limited: 120/min)
 app.use('/api', apiRateLimit, apiRoutes);
@@ -169,8 +173,17 @@ app.listen(config.port, async () => {
 ║  AI:       ${(process.env.GEMINI_API_KEY ? 'Gemini 2.0 Flash' : 'OpenAI/None').padEnd(28)}║
 ║  Cache:    ${(cache.isRedisAvailable() ? 'Redis' : 'In-Memory').padEnd(28)}║
 ║  Shopify:  ${config.shopify.appUrl ? '✓ configured' : '✗ missing'}                    ║
+║  Admin:    ${process.env.ADMIN_SECRET ? '✓ protected' : '✗ no ADMIN_SECRET'}                    ║
 ╚══════════════════════════════════════════╝
   `);
+
+  // Start automated scheduler (auto-research, auto-sync, auto-replacement)
+  try {
+    const { startScheduler } = await import('./services/scheduler');
+    startScheduler();
+  } catch (err: any) {
+    logger.warn('Scheduler failed to start', { error: err.message });
+  }
 });
 
 export default app;
