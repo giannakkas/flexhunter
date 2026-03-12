@@ -47,7 +47,7 @@ export async function syncPerformance(shopId: string): Promise<{ synced: number;
       // Calculate health score based on available data
       const daysSinceImport = Math.floor((Date.now() - new Date(imp.importedAt).getTime()) / 86400000);
       const perf = imp.performance;
-      const orders = perf?.orders || 0;
+      const orders = perf?.conversions || 0;
       const revenue = perf?.revenue || 0;
 
       // Health scoring
@@ -77,7 +77,7 @@ export async function syncPerformance(shopId: string): Promise<{ synced: number;
           views: 0,
           addToCarts: 0,
           checkoutsStarted: 0,
-          orders,
+          conversions: orders,
           revenue,
           healthScore,
           lastSyncedAt: new Date(),

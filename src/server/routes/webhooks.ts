@@ -138,14 +138,14 @@ router.post('/webhooks/orders/create', async (req: Request, res: Response) => {
           where: { importedProductId: imported.id },
           create: {
             importedProductId: imported.id,
-            orders: 1,
+            conversions: 1,
             revenue: parseFloat(item.price || '0') * (item.quantity || 1),
             views: 0,
             addToCarts: 0,
             checkoutsStarted: 0,
           },
           update: {
-            orders: { increment: 1 },
+            conversions: { increment: 1 },
             revenue: { increment: parseFloat(item.price || '0') * (item.quantity || 1) },
           },
         });

@@ -53,7 +53,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
     });
 
     const perfAgg = await prisma.productPerformance.aggregate({
-      _sum: { revenue: true, orders: true },
+      _sum: { revenue: true, conversions: true },
       _avg: { healthScore: true },
     });
 
@@ -69,7 +69,7 @@ router.get('/overview', async (_req: Request, res: Response) => {
       counts: { shops, activeShops, candidates, imports, jobs, replacements },
       performance: {
         totalRevenue: perfAgg._sum.revenue || 0,
-        totalOrders: perfAgg._sum.orders || 0,
+        totalOrders: perfAgg._sum.conversions || 0,
         avgHealthScore: Math.round(perfAgg._avg.healthScore || 0),
       },
       recentJobs,
