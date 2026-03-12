@@ -10,6 +10,8 @@ import { analyzeDomainAndSave } from '../domain/domainEngine';
 import { providerRegistry } from '../providers/providerRegistry';
 import { aiComplete } from '../../utils/ai';
 import { relevanceFilterAgent, runMultiAgentScoring, MultiAgentScore } from '../agents';
+import { buildSignals, storeSignals, buildScoringTrace } from '../signals';
+import { getWeights } from '../signals/feedbackLoop';
 import { StoreDNA, NormalizedProduct, MerchantSettingsData, DEFAULT_SCORE_WEIGHTS } from '../../../shared/types';
 
 export interface ResearchResult {
@@ -155,8 +157,14 @@ async function deepScore(
   dna: StoreDNA,
   settings: MerchantSettingsData,
   maxResults: number,
+  shopId: string,
 ): Promise<(NormalizedProduct & { agentScore: MultiAgentScore })[]> {
   const results: (NormalizedProduct & { agentScore: MultiAgentScore })[] = [];
+
+  // Get shop-specific weights (learned from outcomes if enough data)
+  const weights = await getWeights(shopId);
+  const isLearned = JSON.stringify(weights) !== JSON.stringify({ storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 });
+  if (isLearned) console.log(`[Research] Using learned weights for shop ${shopId}`);
 
   // Score in batches of 5 for parallelism
   const batchSize = 5;
@@ -170,17 +178,29 @@ async function deepScore(
       const score = scores[j];
       if (!score) continue;
 
-      // Skip products that agents say to avoid
-      if (score.recommendation === 'avoid') {
-        console.log(`[Research] SKIP "${batch[j].title}" — agents say avoid (fit: ${score.storeFit.score})`);
-        continue;
+      // Recalculate final score with learned weights
+      if (isLearned) {
+        score.finalScore = Math.round(
+          score.storeFit.score * weights.storeFit +
+          score.profitability.score * weights.profitability +
+          score.trendPotential.score * weights.trendPotential +
+          score.viralPrediction.viralScore * weights.viralPrediction +
+          score.saturation.score * weights.saturation +
+          score.supplierQuality.score * weights.supplierQuality
+        );
       }
+
+      // Skip products that agents say to avoid
+      if (score.recommendation === 'avoid') continue;
+
+      // Build + store signals for the feature store
+      const signals = buildSignals(batch[j].providerProductId, shopId, score, batch[j]);
+      storeSignals(signals).catch(() => {});
 
       results.push({ ...batch[j], agentScore: score });
     }
   }
 
-  // Sort by final score
   results.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
   return results.slice(0, maxResults);
 }
@@ -245,7 +265,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
 
   // Step 5: Multi-Agent Deep Scoring
   console.log(`[Research] Step 5/6: Running 5-agent scoring on top ${Math.min(relevant.length, maxCandidates + 5)} products...`);
-  const scored = await deepScore(relevant, dna, settingsData, maxCandidates);
+  const scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
   console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
 
   // Step 6: Save results
@@ -306,7 +326,11 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
           refundRiskInverse: agentScore.supplierQuality.score,
           finalScore: agentScore.finalScore,
           confidence: agentScore.storeFit.confidence,
-          explanation: agentScore.explanation,
+          explanation: (() => {
+            const signals = buildSignals(candidate.id, shopId, agentScore, product);
+            const evLevel = signals.evidenceCompleteness >= 0.7 ? 'HIGH' : signals.evidenceCompleteness >= 0.4 ? 'MEDIUM' : 'LOW';
+            return `[${evLevel} confidence, ${signals.signalCount}/22 signals] ${agentScore.explanation}`;
+          })(),
           fitReasons: [
             ...agentScore.storeFit.signals,
             ...agentScore.profitability.signals.slice(0, 2),

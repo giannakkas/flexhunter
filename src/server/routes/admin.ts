@@ -278,6 +278,57 @@ router.post('/shops/:id/deactivate', async (req: Request, res: Response) => {
   }
 });
 
+// ── Scoring Debug — inspect why a product scored the way it did ──
+router.get('/scoring-trace/:candidateId', async (req: Request, res: Response) => {
+  try {
+    const candidate = await prisma.candidateProduct.findUniqueOrThrow({
+      where: { id: req.params.candidateId },
+      include: { score: true },
+    });
+    const { getSignals } = await import('../services/signals');
+    const signals = await getSignals(candidate.shopId, candidate.id);
+
+    res.json({
+      candidate: { id: candidate.id, title: candidate.title, category: candidate.category },
+      score: candidate.score,
+      signals: signals || 'No signals stored — run research again',
+      weights: (await import('../services/signals/feedbackLoop')).DEFAULT_WEIGHTS,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Feedback Loop — recalibrate weights for a shop ──
+router.post('/shops/:id/recalibrate', async (req: Request, res: Response) => {
+  try {
+    const { recalibrateWeights } = await import('../services/signals/feedbackLoop');
+    const result = await recalibrateWeights(req.params.id);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Config Status ──
+router.get('/config', (_req: Request, res: Response) => {
+  const { configStatus } = require('../config');
+  res.json({
+    ...configStatus,
+    env: {
+      GEMINI_API_KEY: !!process.env.GEMINI_API_KEY,
+      OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+      RAPIDAPI_KEY: !!process.env.RAPIDAPI_KEY,
+      CJ_API_KEY: !!process.env.CJ_API_KEY,
+      SHOPIFY_API_KEY: !!process.env.SHOPIFY_API_KEY,
+      SHOPIFY_API_SECRET: !!process.env.SHOPIFY_API_SECRET,
+      DATABASE_URL: !!process.env.DATABASE_URL,
+      REDIS_URL: !!process.env.REDIS_URL,
+      ADMIN_SECRET: !!process.env.ADMIN_SECRET,
+    },
+  });
+});
+
 // ── API Health Check — tests every external service ──
 router.get('/api-health', async (_req: Request, res: Response) => {
   const results: any[] = [];

@@ -1036,6 +1036,42 @@ router.post('/replacements/scan', async (req: Request, res: Response) => {
   }
 });
 
+// Recalibrate scoring weights from merchant outcomes
+router.post('/scoring/recalibrate', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const { recalibrateWeights } = await import('../services/signals/feedbackLoop');
+    const result = await recalibrateWeights(shopId);
+    res.json({ success: true, ...result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get scoring trace for a candidate
+router.get('/scoring/trace/:candidateId', async (req: Request, res: Response) => {
+  try {
+    const candidate = await prisma.candidateProduct.findUniqueOrThrow({
+      where: { id: req.params.candidateId },
+      include: { score: true },
+    });
+    const { getSignals, buildScoringTrace } = await import('../services/signals');
+    const signals = await getSignals(candidate.shopId, candidate.id);
+    res.json({
+      success: true,
+      data: {
+        title: candidate.title,
+        score: candidate.score,
+        signals,
+        evidenceCompleteness: signals?.evidenceCompleteness || 0,
+        signalCount: signals?.signalCount || 0,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ── Trend Intelligence ─────────────────────────
 
 router.post('/trends/analyze', async (req: Request, res: Response) => {
