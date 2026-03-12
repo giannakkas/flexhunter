@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
-  EmptyState, Modal, Divider, Spinner, Banner, IndexTable,
-  InlineGrid,
+  EmptyState, Modal, Divider, Spinner, Banner, InlineGrid,
+  TextField,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { useApi, apiFetch } from '../hooks/useApi';
@@ -10,19 +10,13 @@ import { useApi, apiFetch } from '../hooks/useApi';
 const PLACEHOLDER = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
 const GLOW = `@keyframes importGlow { 0%,100% { box-shadow: 0 0 6px rgba(0,128,96,0.4); } 50% { box-shadow: 0 0 16px rgba(0,128,96,0.7); } }`;
 
-function Img({ src, size = 48 }: { src?: string; size?: number }) {
-  const [err, setErr] = useState(false);
-  return <img src={!src || err ? PLACEHOLDER : src} alt="" onError={() => setErr(true)}
-    style={{ width: size, height: size, objectFit: 'cover', borderRadius: 8, background: '#f0f0f0', flexShrink: 0 }} />;
-}
-
-function ScoreCircle({ value, size = 36 }: { value: number; size?: number }) {
+function ScoreCircle({ value, size = 34 }: { value: number; size?: number }) {
   const c = value >= 80 ? '#008060' : value >= 65 ? '#47B881' : value >= 50 ? '#B98900' : value >= 35 ? '#DE6E1E' : '#D72C0D';
   return (
     <div style={{
       width: size, height: size, borderRadius: '50%', border: `3px solid ${c}`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontFamily: 'monospace', fontWeight: 700, fontSize: size * 0.35, color: c, flexShrink: 0,
+      fontFamily: 'monospace', fontWeight: 700, fontSize: size * 0.35, color: c, flexShrink: 0, background: 'rgba(255,255,255,0.9)',
     }}>{Math.round(value)}</div>
   );
 }
@@ -32,39 +26,78 @@ export function SelectionsPage() {
   const { data: candidates, get, loading } = useApi<any[]>();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+
+  // Pre-import edit modal state
+  const [editItem, setEditItem] = useState<any>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editDesc, setEditDesc] = useState('');
+
+  // Post-import SEO modal
+  const [seoModal, setSeoModal] = useState<{ open: boolean; importedId: string; title: string }>({ open: false, importedId: '', title: '' });
+
+  // Confirm dialog
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; title: string; body: string; fn: () => void }>({ open: false, title: '', body: '', fn: () => {} });
 
   useEffect(() => { get('/candidates?status=APPROVED&sort=score'); }, [get]);
-  useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 4000); return () => clearTimeout(t); } }, [msg]);
-
-  const [lastImportedId, setLastImportedId] = useState<string | null>(null);
+  useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 5000); return () => clearTimeout(t); } }, [msg]);
 
   const items = candidates || [];
 
-  const importToShopify = async (id: string) => {
-    setBusy(id);
+  // Open pre-import editor
+  const openEditModal = (item: any) => {
+    setEditItem(item);
+    setEditTitle(item.title);
+    setEditPrice(item.suggestedPrice?.toFixed(2) || '');
+    setEditDesc(item.description?.slice(0, 500) || '');
+  };
+
+  // Confirm import with edits
+  const confirmImport = async () => {
+    if (!editItem) return;
+    setBusy(editItem.id);
+    setEditItem(null);
     try {
-      const r = await apiFetch<any>(`/candidates/${id}/approve`, { method: 'POST' });
+      const r = await apiFetch<any>(`/candidates/${editItem.id}/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          customTitle: editTitle || undefined,
+          customPrice: editPrice ? parseFloat(editPrice) : undefined,
+          customDescription: editDesc || undefined,
+        }),
+      });
       if (r.shopifyError) {
         setMsg(`Warning: ${r.shopifyError}`);
+      } else if (r.importedProductId) {
+        // Show SEO CTA
+        setSeoModal({ open: true, importedId: r.importedProductId, title: editTitle || editItem.title });
       } else {
-        setLastImportedId(id);
+        setMsg(r.message || 'Imported!');
       }
-    } catch (e: any) { setMsg(`Error: ${e.message}`); }
+    } catch (e: any) {
+      setMsg(`Error: ${e.message}`);
+    }
     setBusy(null);
     get('/candidates?status=APPROVED&sort=score');
   };
 
   const importAll = async () => {
-    let lastId: string | null = null;
+    let lastImportedId = '';
+    let count = 0;
     for (const item of items) {
       if (!item.importedProduct) {
-        await apiFetch(`/candidates/${item.id}/approve`, { method: 'POST' }).catch(() => {});
-        lastId = item.id;
+        try {
+          const r = await apiFetch<any>(`/candidates/${item.id}/approve`, { method: 'POST' });
+          if (r.importedProductId) lastImportedId = r.importedProductId;
+          count++;
+        } catch {}
       }
     }
-    setMsg(`Imported ${items.length} products to Shopify! Don't forget to optimize SEO.`);
+    setMsg(`Imported ${count} products to Shopify!`);
     get('/candidates?status=APPROVED&sort=score');
+    if (lastImportedId) {
+      setTimeout(() => setSeoModal({ open: true, importedId: lastImportedId, title: `${count} products` }), 500);
+    }
   };
 
   const unselect = async (id: string) => {
@@ -78,12 +111,13 @@ export function SelectionsPage() {
   return (
     <Page title="Candidates" subtitle={`${items.length} products selected for your store`}
       primaryAction={items.length > 0 ? {
-        content: `🚀 Import All ${items.length} to Shopify`,
+        content: `🚀 Import All ${items.filter(i => !i.importedProduct).length} to Shopify`,
         onAction: () => setConfirmDlg({
           open: true, title: 'Import All to Shopify',
-          body: `This will create ${items.length} real products in your Shopify store. Continue?`,
+          body: `This will create ${items.filter(i => !i.importedProduct).length} products in your Shopify store. Continue?`,
           fn: async () => { setConfirmDlg(p => ({ ...p, open: false })); await importAll(); },
         }),
+        disabled: items.every(i => i.importedProduct),
       } : undefined}
     >
       <style>{GLOW}</style>
@@ -117,7 +151,6 @@ export function SelectionsPage() {
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.boxShadow = '0 6px 20px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
                 >
-                  {/* Image */}
                   <div style={{ position: 'relative', height: 160, background: '#f5f5f5', overflow: 'hidden' }}>
                     <img src={imgs[0] || PLACEHOLDER} alt="" onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER; }}
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -127,7 +160,6 @@ export function SelectionsPage() {
                     </div>
                   </div>
 
-                  {/* Content */}
                   <div style={{ padding: '12px 14px' }}>
                     <BlockStack gap="200">
                       <Text as="p" variant="bodyMd" fontWeight="bold">
@@ -160,14 +192,18 @@ export function SelectionsPage() {
                         {alreadyImported ? (
                           <InlineStack gap="200">
                             <Badge tone="success">In Shopify ✓</Badge>
-                            <button onClick={() => navigate('/seo')} style={{
+                            <button onClick={() => {
+                              const impId = item.importedProduct?.id;
+                              if (impId) navigate(`/seo?product=${impId}`);
+                              else navigate('/seo');
+                            }} style={{
                               display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                               height: 28, padding: '0 12px', fontSize: 11, fontWeight: 700, borderRadius: 6,
                               border: '1px solid #5C6AC4', background: '#5C6AC4', color: 'white', cursor: 'pointer',
                             }}>SEO Optimize</button>
                           </InlineStack>
                         ) : (
-                          <button onClick={() => importToShopify(item.id)} disabled={busy === item.id} style={{
+                          <button onClick={() => openEditModal(item)} disabled={busy === item.id} style={{
                             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                             height: 30, padding: '0 14px', fontSize: 12, fontWeight: 700, borderRadius: 6,
                             border: '1px solid #008060', background: '#008060', color: 'white',
@@ -184,43 +220,76 @@ export function SelectionsPage() {
           </InlineGrid>
         )}
 
-        <Modal open={confirmDlg.open} onClose={() => setConfirmDlg(p => ({ ...p, open: false }))} title={confirmDlg.title}
-          primaryAction={{ content: 'Import All', onAction: confirmDlg.fn }}
-          secondaryActions={[{ content: 'Cancel', onAction: () => setConfirmDlg(p => ({ ...p, open: false })) }]}
-        ><Modal.Section><Text as="p">{confirmDlg.body}</Text></Modal.Section></Modal>
+        {/* ── Pre-Import Edit Modal ── */}
+        <Modal open={!!editItem} onClose={() => setEditItem(null)}
+          title="Review & Edit Before Import"
+          primaryAction={{ content: '🚀 Confirm Import', onAction: confirmImport }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setEditItem(null) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              <Banner tone="info">
+                <Text as="p" variant="bodySm">Customize your product before it goes live in Shopify. You can always edit later.</Text>
+              </Banner>
 
-        {/* Post-Import SEO CTA */}
-        <Modal open={!!lastImportedId} onClose={() => setLastImportedId(null)}
+              {editItem && (
+                <div style={{ display: 'flex', gap: 16, padding: 12, background: '#F9FAFB', borderRadius: 10 }}>
+                  <img src={editItem.imageUrls?.[0] || PLACEHOLDER} alt=""
+                    style={{ width: 80, height: 80, borderRadius: 8, objectFit: 'cover' }}
+                    onError={e => { (e.target as HTMLImageElement).src = PLACEHOLDER; }} />
+                  <div>
+                    <Text as="p" variant="bodySm" tone="subdued">Original from {editItem.sourceName}</Text>
+                    <Text as="p" variant="bodySm">Cost: ${editItem.costPrice?.toFixed(2)} · Score: {editItem.score?.finalScore || 0}/100</Text>
+                    <InlineStack gap="100">
+                      <Badge>{editItem.category || 'General'}</Badge>
+                      {editItem.orderVolume > 0 && <Badge tone="success">{editItem.orderVolume.toLocaleString()} sold</Badge>}
+                    </InlineStack>
+                  </div>
+                </div>
+              )}
+
+              <TextField label="Product Title" value={editTitle} onChange={setEditTitle} autoComplete="off"
+                helpText="This is what customers see. Make it clear and compelling." />
+
+              <TextField label="Selling Price ($)" value={editPrice} onChange={setEditPrice} autoComplete="off" type="number"
+                helpText={editItem ? `Cost: $${editItem.costPrice?.toFixed(2)} · Margin: ${editPrice ? ((1 - editItem.costPrice / parseFloat(editPrice)) * 100).toFixed(0) : '-'}%` : ''} />
+
+              <TextField label="Description" value={editDesc} onChange={setEditDesc} autoComplete="off" multiline={4}
+                helpText="You can optimize this with SEO after import." />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+
+        {/* ── Post-Import SEO Modal ── */}
+        <Modal open={seoModal.open} onClose={() => setSeoModal({ open: false, importedId: '', title: '' })}
           title="✅ Product Imported Successfully!"
-          primaryAction={{ content: '🚀 Optimize SEO Now', onAction: () => { navigate('/seo'); setLastImportedId(null); } }}
-          secondaryActions={[{ content: 'Later', onAction: () => setLastImportedId(null) }]}
+          primaryAction={{ content: '🚀 Optimize SEO Now', onAction: () => { navigate(`/seo?product=${seoModal.importedId}`); setSeoModal({ open: false, importedId: '', title: '' }); } }}
+          secondaryActions={[{ content: 'Later', onAction: () => setSeoModal({ open: false, importedId: '', title: '' }) }]}
         >
           <Modal.Section>
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
-                Your product is now live in Shopify! But there's one more step that can make a big difference...
+                <strong>"{seoModal.title}"</strong> is now live in Shopify! There's one more step that makes a big difference...
               </Text>
               <div style={{ padding: '16px 20px', borderRadius: 12, background: 'linear-gradient(135deg, #F0F5FF, #E8F4FF)', border: '1px solid #B4D5FE' }}>
                 <BlockStack gap="200">
                   <Text as="h3" variant="headingSm">Why SEO Optimization Matters</Text>
-                  <Text as="p" variant="bodySm">Products with optimized titles, descriptions, and meta tags get <strong>2-5x more organic traffic</strong> from Google Shopping and search results. Our AI will:</Text>
-                  <BlockStack gap="100">
-                    {[
-                      '✓ Optimize your product title for search engines',
-                      '✓ Rewrite the description with keywords',
-                      '✓ Generate meta title & description',
-                      '✓ Suggest high-value keyword targets',
-                      '✓ Apply changes directly to Shopify',
-                    ].map((item, i) => (
-                      <Text key={i} as="p" variant="bodySm" fontWeight="semibold">{item}</Text>
-                    ))}
-                  </BlockStack>
+                  <Text as="p" variant="bodySm">Products with optimized titles and descriptions get <strong>2-5x more organic traffic</strong> from Google Shopping and search. Our AI will:</Text>
+                  {['✓ Rewrite your title with high-ranking keywords', '✓ Create a conversion-focused description', '✓ Generate meta title & description for Google', '✓ Suggest URL handle & tags', '✓ Apply changes directly to Shopify'].map((t, i) => (
+                    <Text key={i} as="p" variant="bodySm" fontWeight="semibold">{t}</Text>
+                  ))}
                 </BlockStack>
               </div>
-              <Text as="p" variant="bodySm" tone="subdued">This takes about 10 seconds and can dramatically improve your product's visibility.</Text>
+              <Text as="p" variant="bodySm" tone="subdued">Takes about 10 seconds.</Text>
             </BlockStack>
           </Modal.Section>
         </Modal>
+
+        {/* Confirm dialog */}
+        <Modal open={confirmDlg.open} onClose={() => setConfirmDlg(p => ({ ...p, open: false }))} title={confirmDlg.title}
+          primaryAction={{ content: 'Import All', onAction: confirmDlg.fn }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setConfirmDlg(p => ({ ...p, open: false })) }]}
+        ><Modal.Section><Text as="p">{confirmDlg.body}</Text></Modal.Section></Modal>
 
         <div style={{ height: 80 }} />
       </BlockStack>

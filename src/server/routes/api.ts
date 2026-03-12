@@ -487,6 +487,7 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
     const { id } = req.params;
+    const { customTitle, customPrice, customDescription } = req.body || {};
 
     const candidate = await prisma.candidateProduct.findUniqueOrThrow({
       where: { id },
@@ -500,12 +501,14 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
 
     const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
     const cost = candidate.costPrice || 0;
-    const price = candidate.suggestedPrice || cost * 2.5;
+    const finalTitle = customTitle || candidate.title;
+    const finalPrice = Number(customPrice) || candidate.suggestedPrice || cost * 2.5;
+    const finalDescription = customDescription || candidate.description || '';
     const scoreVal = Math.round(candidate.score?.finalScore || 0);
 
     let shopifyProductId = `mock-${Date.now()}`;
     let shopifyGid = `gid://shopify/Product/${shopifyProductId}`;
-    let shopifyHandle = candidate.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
+    let shopifyHandle = finalTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 50);
     let isMock = true;
 
     // Try real Shopify import
@@ -515,12 +518,12 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
         const result = await createShopifyProduct(
           shop.shopDomain, shop.accessToken,
           {
-            title: candidate.title,
-            descriptionHtml: candidate.description || '',
+            title: finalTitle,
+            descriptionHtml: finalDescription,
             productType: candidate.category || '',
             tags: ['flexhunter', 'testing', `score:${scoreVal}`],
             status: 'ACTIVE',
-            variants: [{ price: price.toFixed(2) }],
+            variants: [{ price: finalPrice.toFixed(2) }],
             images: (candidate.imageUrls || []).filter((u: string) => u && u.startsWith('http')).map((u: string) => ({ src: u })),
           }
         );
@@ -528,12 +531,10 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
         shopifyGid = result.id;
         shopifyHandle = result.handle;
         isMock = false;
-        console.log(`[Import] SUCCESS: Created Shopify product ${shopifyProductId} for "${candidate.title}"`);
+        console.log(`[Import] SUCCESS: Created Shopify product ${shopifyProductId} for "${finalTitle}"`);
       } catch (shopifyErr: any) {
         console.error('[Import] Shopify API error:', shopifyErr.message);
-        // Still save locally but report the error
         isMock = true;
-        // Include error info in response
         return res.json({
           success: true,
           message: `Saved locally but Shopify import failed: ${shopifyErr.message}. Check your token in Settings.`,
@@ -545,7 +546,7 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
     }
 
     // Create ImportedProduct
-    await prisma.importedProduct.create({
+    const imported = await prisma.importedProduct.create({
       data: {
         shopId,
         candidateId: id,
@@ -553,10 +554,10 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
         shopifyProductGid: shopifyGid,
         shopifyHandle,
         shopifyStatus: isMock ? 'MOCK' : 'DRAFT',
-        importedTitle: candidate.title,
-        importedDescription: candidate.description,
+        importedTitle: finalTitle,
+        importedDescription: finalDescription,
         importedTags: ['flexhunter', 'testing'],
-        importedPrice: price,
+        importedPrice: finalPrice,
         publishedOnImport: false,
         status: 'TESTING',
         testStartedAt: new Date(),
@@ -576,11 +577,15 @@ router.post('/candidates/:id/approve', async (req: Request, res: Response) => {
         action: 'PRODUCT_IMPORTED',
         entityType: 'CandidateProduct',
         entityId: id,
-        explanation: `Imported "${candidate.title}" (${isMock ? 'mock' : 'Shopify'})`,
+        explanation: `Imported "${finalTitle}" (${isMock ? 'mock' : 'Shopify'})`,
       },
     });
 
-    res.json({ success: true, message: isMock ? 'Product saved (mock import)' : 'Product imported to Shopify' });
+    res.json({
+      success: true,
+      message: isMock ? 'Product saved (mock import)' : 'Product imported to Shopify',
+      importedProductId: imported.id,
+    });
   } catch (err: any) {
     console.error('Import error:', err);
     res.status(500).json({ success: false, error: err.message });
