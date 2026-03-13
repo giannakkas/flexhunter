@@ -9,8 +9,9 @@ import prisma from '../../utils/db';
 import { analyzeDomainAndSave } from '../domain/domainEngine';
 import { providerRegistry } from '../providers/providerRegistry';
 import { aiComplete } from '../../utils/ai';
-import { relevanceFilterAgent, runMultiAgentScoring, MultiAgentScore } from '../agents';
-import { buildSignals, storeSignals, buildScoringTrace } from '../signals';
+import { relevanceFilterAgent, MultiAgentScore } from '../agents';
+import { runBatchMultiAgentScoring } from '../agents/batchScoring';
+import { buildSignals, storeSignals } from '../signals';
 import { getWeights } from '../signals/feedbackLoop';
 import { StoreDNA, NormalizedProduct, MerchantSettingsData, DEFAULT_SCORE_WEIGHTS } from '../../../shared/types';
 
@@ -134,8 +135,8 @@ async function filterRelevant(
 ): Promise<NormalizedProduct[]> {
   if (products.length === 0) return [];
 
-  // Process in batches of 30 for the relevance filter
-  const batchSize = 30;
+  // Process in batches of 60 for the relevance filter (1 AI call per batch)
+  const batchSize = 60;
   const relevant: NormalizedProduct[] = [];
 
   for (let i = 0; i < products.length; i += batchSize) {
@@ -163,22 +164,24 @@ async function deepScore(
 
   // Get shop-specific weights (learned from outcomes if enough data)
   const weights = await getWeights(shopId);
-  const isLearned = JSON.stringify(weights) !== JSON.stringify({ storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 });
+  const defaultW = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
+  const isLearned = JSON.stringify(weights) !== JSON.stringify(defaultW);
   if (isLearned) console.log(`[Research] Using learned weights for shop ${shopId}`);
 
-  // Score in batches of 5 for parallelism
+  // BATCH SCORING: 1 AI call per 5 products (was 3 calls per 1 product)
   const batchSize = 5;
+  let aiCallCount = 0;
+
   for (let i = 0; i < products.length && results.length < maxResults; i += batchSize) {
     const batch = products.slice(i, i + batchSize);
-    const scores = await Promise.all(
-      batch.map(p => runMultiAgentScoring(p, dna, settings).catch(() => null))
-    );
+    const scores = await runBatchMultiAgentScoring(batch, dna, settings);
+    aiCallCount++;
 
     for (let j = 0; j < batch.length; j++) {
       const score = scores[j];
       if (!score) continue;
 
-      // Recalculate final score with learned weights
+      // Recalculate with learned weights
       if (isLearned) {
         score.finalScore = Math.round(
           score.storeFit.score * weights.storeFit +
@@ -190,10 +193,9 @@ async function deepScore(
         );
       }
 
-      // Skip products that agents say to avoid
       if (score.recommendation === 'avoid') continue;
 
-      // Build + store signals for the feature store
+      // Store signals in feature store
       const signals = buildSignals(batch[j].providerProductId, shopId, score, batch[j]);
       storeSignals(signals).catch(() => {});
 
@@ -201,6 +203,7 @@ async function deepScore(
     }
   }
 
+  console.log(`[Research] Batch scored ${products.length} products in ${aiCallCount} AI calls`);
   results.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
   return results.slice(0, maxResults);
 }
@@ -264,7 +267,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   console.log(`[Research] Step 4/6: ${relevant.length} relevant products`);
 
   // Step 5: Multi-Agent Deep Scoring
-  console.log(`[Research] Step 5/6: Running 5-agent scoring on top ${Math.min(relevant.length, maxCandidates + 5)} products...`);
+  console.log(`[Research] Step 5/6: Running BATCH AI scoring (1 call per 5 products)...`);
   const scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
   console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
 
