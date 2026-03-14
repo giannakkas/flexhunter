@@ -19,10 +19,11 @@ const BTN = { display: 'inline-flex', alignItems: 'center', justifyContent: 'cen
 
 function AutoDismiss({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const [vis, setVis] = useState(true);
-  useEffect(() => { const t = setTimeout(() => { setVis(false); setTimeout(onDismiss, 400); }, 3500); return () => clearTimeout(t); }, [onDismiss]);
+  useEffect(() => { const t = setTimeout(() => { setVis(false); setTimeout(onDismiss, 400); }, 5000); return () => clearTimeout(t); }, [onDismiss]);
+  const isError = message.includes('Error') || message.includes('fail') || message.includes('unavailable') || message.includes('wrong') || message.includes('wait') || message.includes('expired') || message.includes('try again');
   return (
     <div style={{ opacity: vis ? 1 : 0, transition: 'opacity 0.4s', maxHeight: vis ? 200 : 0, overflow: 'hidden' }}>
-      <Banner tone={message.includes('Error') || message.includes('fail') ? 'critical' : 'success'} onDismiss={onDismiss}><Text as="p">{message}</Text></Banner>
+      <Banner tone={isError ? 'warning' : 'success'} onDismiss={onDismiss}><Text as="p">{message}</Text></Banner>
     </div>
   );
 }

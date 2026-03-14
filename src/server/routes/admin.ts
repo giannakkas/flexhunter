@@ -345,6 +345,10 @@ router.get('/config', (_req: Request, res: Response) => {
 
 // ── API Health Check — tests every external service ──
 router.get('/api-health', async (_req: Request, res: Response) => {
+  // Cache health check for 5 minutes — prevents burning API quota
+  const cached = await cache.get('admin:api-health');
+  if (cached) return res.json(cached);
+
   const results: any[] = [];
 
   // Helper: test an API and return result
@@ -509,11 +513,16 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   const errors = results.filter(r => r.status === 'error').length;
   const notConfigured = results.filter(r => r.status === 'not_configured').length;
 
-  res.json({
+  const response = {
     summary: { total: results.length, healthy, errors, notConfigured },
     apis: results,
     checkedAt: new Date().toISOString(),
-  });
+  };
+
+  // Cache for 5 minutes to avoid burning API quota
+  await cache.set('admin:api-health', response, 300);
+
+  res.json(response);
 });
 
 // ── API Monitoring ────────────────────────────
