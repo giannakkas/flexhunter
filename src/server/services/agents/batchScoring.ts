@@ -23,6 +23,15 @@ interface BatchAIResult {
   viralReason: string;
   storeFitSignals: string[];
   isTikTokFriendly: boolean;
+  // NEW: winning product signals
+  winnerScore: number;
+  winnerSignals: string[];
+  adFriendly: boolean;
+  problemSolving: boolean;
+  wowFactor: boolean;
+  giftWorthy: boolean;
+  impulsePrice: boolean;
+  repeatPurchase: boolean;
 }
 
 /**
@@ -42,24 +51,33 @@ export async function batchAIScore(
     return `${i}. "${p.title}" | Cat: ${p.category || '?'} | $${p.suggestedPrice || '?'} (cost: $${p.costPrice || '?'}, margin: ${margin}%) | ${p.orderVolume || 0} orders | ${p.reviewRating || 0}★ | Ships: ${p.shippingDays || '?'}d from ${p.warehouseCountry || 'CN'}`;
   }).join('\n');
 
-  const prompt = `You are a product analyst for a store that sells: "${storeDesc}"
+  const prompt = `You are an expert product analyst for a store that sells: "${storeDesc}"
 Target audience: ${settings.targetAudience?.join(', ') || 'general'}
 Price range: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}
 
 Score these ${products.length} products. For EACH product, evaluate:
-1. storeFit (0-100): Does this product belong in this store? 0=completely wrong, 100=perfect fit
-2. saturation (0-100): Market opportunity. 100=untapped opportunity, 0=oversaturated
-3. viralScore (0-100): Viral/trend potential. Is this TikTok-shareable? Impulse-buy worthy?
+
+1. storeFit (0-100): Does this product belong in this store?
+2. saturation (0-100): Market opportunity. 100=untapped, 0=oversaturated
+3. viralScore (0-100): TikTok/social media viral potential
 4. trendStage: "early_acceleration" | "breakout_candidate" | "rising_trend" | "stable_trend" | "saturated"
+5. winnerScore (0-100): Overall "winning product" potential combining ALL factors below:
+   - Is it a PROBLEM-SOLVING product? (solves a clear pain point)
+   - Does it have a WOW FACTOR? (makes people say "I need this!")
+   - Is it AD-FRIENDLY? (easy to demonstrate in a 15-30 sec video)
+   - Is it GIFT-WORTHY? (something people buy for others)
+   - Is it at an IMPULSE PRICE? ($15-45 sweet spot)
+   - Does it have REPEAT PURCHASE potential?
 
 PRODUCTS:
 ${productSummaries}
 
 RULES:
-- Be STRICT with storeFit — a sex toy scores 0 in a hunting store
-- Products unrelated to "${storeDesc}" get storeFit < 20
-- Consider the price range — products outside $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100} score lower
-- viral products are visual, shareable, gift-worthy, problem-solving
+- Be STRICT with storeFit — unrelated products get storeFit < 20
+- A winning product typically has 3+ of: problem-solving, wow-factor, ad-friendly, impulse-price
+- Products with high orders AND high viral potential = breakout
+- Products with low orders BUT high viral = early_acceleration (MOST VALUABLE — 1-2 weeks early)
+- Products with 50K+ orders = saturated unless niche-specific
 
 Return ONLY a JSON array with one object per product:
 [
@@ -68,11 +86,19 @@ Return ONLY a JSON array with one object per product:
     "saturation": number,
     "viralScore": number,
     "trendStage": "string",
+    "winnerScore": number,
     "storeFitReason": "1 sentence",
     "saturationReason": "1 sentence",
     "viralReason": "1 sentence",
     "storeFitSignals": ["reason1", "reason2"],
-    "isTikTokFriendly": boolean
+    "winnerSignals": ["signal1", "signal2"],
+    "isTikTokFriendly": boolean,
+    "adFriendly": boolean,
+    "problemSolving": boolean,
+    "wowFactor": boolean,
+    "giftWorthy": boolean,
+    "impulsePrice": boolean,
+    "repeatPurchase": boolean
   }
 ]`;
 
@@ -148,20 +174,31 @@ export async function runBatchMultiAgentScoring(
       signals: [
         ai.viralReason || '',
         ai.isTikTokFriendly ? 'TikTok-friendly product' : '',
+        ai.adFriendly ? '📹 Easy to demo in ads' : '',
+        ai.problemSolving ? '🎯 Solves a clear problem' : '',
+        ai.wowFactor ? '✨ High wow factor' : '',
+        ai.giftWorthy ? '🎁 Gift-worthy' : '',
+        ai.impulsePrice ? '💰 Impulse-buy price range' : '',
+        ai.repeatPurchase ? '🔄 Repeat purchase potential' : '',
       ].filter(Boolean),
       explanation: ai.viralReason || `${ai.trendStage} with ${ai.viralScore}/100 viral potential`,
     };
 
+    // Use winnerScore to boost final score
+    const winnerBonus = ((ai.winnerScore || 0) - 50) * 0.1; // -5 to +5 points
+
     // Weighted score
     const WEIGHTS = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
-    const finalScore = Math.round(
+    let finalScore = Math.round(
       storeFit.score * WEIGHTS.storeFit +
       profit.score * WEIGHTS.profitability +
       trend.score * WEIGHTS.trendPotential +
       viral.viralScore * WEIGHTS.viralPrediction +
       saturation.score * WEIGHTS.saturation +
-      supplier.score * WEIGHTS.supplierQuality
+      supplier.score * WEIGHTS.supplierQuality +
+      winnerBonus
     );
+    finalScore = Math.min(100, Math.max(0, finalScore));
 
     let recommendation: MultiAgentScore['recommendation'];
     if (storeFit.score < 30) recommendation = 'avoid';
@@ -175,6 +212,8 @@ export async function runBatchMultiAgentScoring(
       recommendation = 'strong_buy';
     }
 
+    const winnerSignalsList = (ai.winnerSignals || []).slice(0, 3).join(', ');
+
     results.push({
       storeFit,
       profitability: profit,
@@ -184,7 +223,7 @@ export async function runBatchMultiAgentScoring(
       supplierQuality: supplier,
       finalScore,
       recommendation,
-      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Supplier: ${supplier.reasoning}.`,
+      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Winner: ${ai.winnerScore || '?'}/100${winnerSignalsList ? ` — ${winnerSignalsList}` : ''}. Supplier: ${supplier.reasoning}.`,
     });
   }
 
