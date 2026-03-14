@@ -527,42 +527,32 @@ router.get('/debug/aliexpress', async (_req: Request, res: Response) => {
     const apiKey = process.env.RAPIDAPI_KEY;
     if (!apiKey) return res.json({ error: 'RAPIDAPI_KEY not set' });
 
-    const r = await fetch('https://aliexpress-datahub.p.rapidapi.com/item_search_2?q=camping+tool&page=1&sort=default', {
+    const r = await fetch('https://aliexpress-datahub.p.rapidapi.com/item_search_2?q=test&page=1', {
       headers: { 'X-Rapidapi-Key': apiKey, 'X-Rapidapi-Host': 'aliexpress-datahub.p.rapidapi.com' },
     });
     const data = await r.json();
+    
+    // Return the ENTIRE raw response so we can see the structure
+    const topLevelKeys = Object.keys(data || {});
+    const resultKeys = data?.result ? Object.keys(data.result) : [];
     const resultList = data?.result?.resultList || data?.resultList || [];
-    const first = resultList[0];
-    const item = first?.item || first;
+    const firstRaw = resultList[0];
+    const firstItemKeys = firstRaw ? Object.keys(firstRaw) : [];
+    const innerItem = firstRaw?.item;
+    const innerItemKeys = innerItem ? Object.keys(innerItem) : [];
 
     res.json({
-      totalResults: resultList.length,
-      allKeys: item ? Object.keys(item) : [],
-      firstItem: item || 'No items found',
-      // Show first 3 items with all price-related fields
-      priceFields: resultList.slice(0, 3).map((entry: any) => {
-        const i = entry.item || entry;
-        return {
-          title: i.title?.slice(0, 50),
-          promotionPrice: i.promotionPrice,
-          salePrice: i.salePrice,
-          price: i.price,
-          originalPrice: i.originalPrice,
-          minPrice: i.minPrice,
-          min_price: i.min_price,
-          maxPrice: i.maxPrice,
-          productMinPrice: i.productMinPrice,
-          productMaxPrice: i.productMaxPrice,
-          tradePrice: i.tradePrice,
-          target_sale_price: i.target_sale_price,
-          app_sale_price: i.app_sale_price,
-          formattedPrice: i.formattedPrice,
-          priceStr: i.priceStr,
-          sku: i.sku,
-          prices: i.prices,
-          trade: i.trade,
-        };
-      }),
+      httpStatus: r.status,
+      topLevelKeys,
+      resultKeys,
+      resultListLength: resultList.length,
+      firstEntryKeys: firstItemKeys,
+      innerItemKeys,
+      // Full first 2 entries — raw
+      raw_entry_0: resultList[0] || null,
+      raw_entry_1: resultList[1] || null,
+      // If no resultList, show first 500 chars of raw response
+      rawSnippet: resultList.length === 0 ? JSON.stringify(data).slice(0, 1000) : undefined,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
