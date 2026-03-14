@@ -165,6 +165,11 @@ export function CandidatesPage() {
   const handleResearch = async () => {
     setResearchRunning(true);
     setResearchProgress(0);
+    setResearchStage('🗑️ Clearing old results...');
+
+    // Clear old candidates first
+    await apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
+
     setResearchStage('Initializing Multi-Agent AI Engine...');
 
     const stages = [
@@ -491,7 +496,7 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[{ content: 'Clear & Re-Research', onAction: resetAll, destructive: true }]}
+      secondaryActions={[]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
