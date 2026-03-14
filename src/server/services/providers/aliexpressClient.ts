@@ -43,22 +43,11 @@ export async function searchAliExpressProducts(params: AESearchParams): Promise<
 
   const data = await res.json();
 
-  // DEBUG: log raw response structure to diagnose price issues
+  // Log first item's price for verification
   const firstEntry = data?.result?.resultList?.[0] || data?.resultList?.[0];
   if (firstEntry) {
     const item = firstEntry.item || firstEntry;
-    // Log ALL fields to find where prices live
-    const allKeys = Object.keys(item).join(', ');
-    console.log(`[AliExpress] Item fields: ${allKeys}`);
-    console.log(`[AliExpress] Sample price fields:`, JSON.stringify({
-      promotionPrice: item.promotionPrice, salePrice: item.salePrice,
-      price: item.price, originalPrice: item.originalPrice,
-      minPrice: item.minPrice, min_price: item.min_price,
-      sku: item.sku?.def, prices: item.prices, trade: item.trade,
-      target_sale_price: item.target_sale_price,
-      app_sale_price: item.app_sale_price,
-      formattedPrice: item.formattedPrice,
-    }).slice(0, 500));
+    console.log(`[AliExpress] First item: "$${item.sku?.def?.promotionPrice}" — "${item.title?.slice(0, 40)}"`);
   }
 
   // Handle both response formats (wrapped in .result or direct)
@@ -70,46 +59,33 @@ export async function searchAliExpressProducts(params: AESearchParams): Promise<
     const item = entry.item || entry;
     if (!item.title) continue;
 
-    // Extract product ID from URL
-    const urlMatch = (item.itemUrl || '').match(/item\/(\d+)/);
-    const productId = urlMatch ? urlMatch[1] : `ae-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    // Product ID — directly from itemId field (confirmed in API response)
+    const productId = item.itemId || (() => {
+      const urlMatch = (item.itemUrl || '').match(/item\/(\d+)/);
+      return urlMatch ? urlMatch[1] : `ae-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    })();
 
-    // Parse price — handle ALL possible formats from AliExpress API
-    const rawPrice = item.promotionPrice ?? item.salePrice ?? item.price ?? item.originalPrice
-      ?? item.minPrice ?? item.min_price ?? item.productMinPrice
-      ?? item.sku?.def?.price ?? item.sku?.def?.promotionPrice
-      ?? item.prices?.salePrice ?? item.prices?.originalPrice
-      ?? item.trade?.tradePrice ?? item.target_sale_price ?? item.target_original_price
-      ?? item.app_sale_price ?? item.original_price ?? item.product_small_image_urls
-      ?? 0;
+    // Parse price — CONFIRMED structure: item.sku.def.promotionPrice or item.sku.def.price
     let price = 0;
-    if (typeof rawPrice === 'number') {
-      price = rawPrice;
-    } else {
-      // Strip currency symbols and take first number from range
-      const cleaned = String(rawPrice).replace(/[^0-9.,\-\s]/g, '').trim();
-      const firstNum = cleaned.match(/[\d]+[.,]?[\d]*/);
-      price = firstNum ? parseFloat(firstNum[0].replace(',', '.')) : 0;
+    
+    // Primary: sku.def.promotionPrice (most common)
+    if (item.sku?.def?.promotionPrice) {
+      price = parseFloat(item.sku.def.promotionPrice);
+    } else if (item.sku?.def?.price) {
+      price = parseFloat(item.sku.def.price);
     }
-
-    // Skip products with no valid price — try even more fields
+    
+    // Fallbacks for other API versions
     if (price <= 0) {
-      price = parseFloat(item.productMinPrice || item.productMaxPrice || item.tradePrice
-        || item.formattedPrice || item.priceStr || '0') || 0;
-    }
-    // Last resort: check if price is in a formatted string like "US $12.99"
-    if (price <= 0 && item.trade?.tradeDesc) {
-      const m = String(item.trade.tradeDesc).match(/[\d]+[.,][\d]+/);
-      if (m) price = parseFloat(m[0].replace(',', '.'));
-    }
-
-    // Log if still 0 (helps debug)
-    if (price <= 0) {
-      console.warn(`[AliExpress] $0 price for "${item.title?.slice(0, 40)}" — raw fields:`, JSON.stringify({
-        promotionPrice: item.promotionPrice, salePrice: item.salePrice, price: item.price,
-        originalPrice: item.originalPrice, minPrice: item.minPrice, sku: item.sku?.def,
-        target_sale_price: item.target_sale_price, app_sale_price: item.app_sale_price,
-      }).slice(0, 300));
+      const rawPrice = item.promotionPrice ?? item.salePrice ?? item.price ?? item.originalPrice
+        ?? item.minPrice ?? item.target_sale_price ?? item.app_sale_price ?? 0;
+      if (typeof rawPrice === 'number' && rawPrice > 0) {
+        price = rawPrice;
+      } else if (rawPrice) {
+        const cleaned = String(rawPrice).replace(/[^0-9.,]/g, '').trim();
+        const firstNum = cleaned.match(/[\d]+[.,]?[\d]*/);
+        price = firstNum ? parseFloat(firstNum[0].replace(',', '.')) : 0;
+      }
     }
 
     // Clean image URL (sometimes starts with //)
@@ -139,8 +115,8 @@ export async function searchAliExpressProducts(params: AESearchParams): Promise<
       shippingSpeed: 'STANDARD',
       warehouseCountry: 'CN',
       reviewCount: parseInt(item.totalTranpro3 || item.reviewCount || item.totalReviews || '0') || 0,
-      reviewRating: parseFloat(item.averageStarRate || item.starRating || item.evaluateScore || '4.5') || 4.5,
-      orderVolume: parseInt(item.sales || item.totalOrders || item.tradeDesc || '0') || 0,
+      reviewRating: parseFloat(item.averageStarRate ?? item.starRating ?? item.evaluateScore ?? '0') || 0,
+      orderVolume: Number(item.sales ?? item.totalOrders ?? 0) || 0,
       supplierRating: 4.6,
       sourceUrl: productUrl || `https://www.aliexpress.com/item/${productId}.html`,
       sourceName: 'AliExpress',
