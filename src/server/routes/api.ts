@@ -384,7 +384,16 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     const shopId = await getOrCreateShop(req);
     console.log(`[Research] POST /research/start for shop ${shopId}`);
 
-    // Always run synchronously for now (more reliable than queue)
+    // Check if Store DNA is configured
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    if (!settings?.storeDescription) {
+      return res.json({
+        success: true,
+        message: 'Please set up your Store DNA first. Go to Store DNA and describe what your store sells.',
+        data: { totalFetched: 0, totalScored: 0, totalSaved: 0, batchId: '', topCandidates: [] },
+      });
+    }
+
     const { runResearchPipeline } = await import('../services/research/researchPipeline');
     const result = await runResearchPipeline(shopId);
 
