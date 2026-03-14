@@ -466,7 +466,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── TikTok (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('TikTok Trends (RapidAPI)', async () => {
-      const r = await fetch('https://tiktok-creative-center-api.p.rapidapi.com/api/search/hashtag?keyword=gadget&country=us', {
+      const r = await fetch('https://tiktok-creative-center-api.p.rapidapi.com/api/trending/keyword?keyword=gadget&country=us&period=120', {
         headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'tiktok-creative-center-api.p.rapidapi.com' },
         signal: AbortSignal.timeout(8000),
       });

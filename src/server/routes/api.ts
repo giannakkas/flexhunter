@@ -1265,6 +1265,17 @@ router.get('/trends/viral-products', async (req: Request, res: Response) => {
   }
 });
 
+// TikTok Top Products — trending products on TikTok right now
+router.get('/trends/tiktok-products', async (req: Request, res: Response) => {
+  try {
+    const { getTikTokTopProducts } = await import('../services/trends/tiktokTrends');
+    const products = await getTikTokTopProducts(req.query.country as string || 'US');
+    res.json({ success: true, data: products });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/trends/keyword/:keyword', async (req: Request, res: Response) => {
   try {
     const { keyword } = req.params;
