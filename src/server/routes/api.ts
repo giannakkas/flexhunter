@@ -1147,6 +1147,115 @@ router.post('/trends/analyze', async (req: Request, res: Response) => {
   }
 });
 
+// Discover winning trends — AI generates trending product keywords
+router.post('/trends/discover', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    const storeDesc = settings?.storeDescription || '';
+
+    // AI generates trending keywords based on store + current market
+    const { aiComplete } = await import('../utils/ai');
+    const keywords = await aiComplete<string[]>(`You are a trend forecasting expert. Generate 8 product keywords/categories that are trending RIGHT NOW and likely to go viral in the next 1-2 weeks.
+
+${storeDesc ? `The merchant's store sells: "${storeDesc}". Include 4 keywords related to their niche AND 4 general trending product categories.` : 'Generate 8 general trending product categories across dropshipping.'}
+
+Think about:
+- Products blowing up on TikTok this week
+- Seasonal products that are about to peak
+- New gadgets getting attention
+- Problem-solving products going viral
+- Gift-worthy items trending for upcoming holidays
+
+Return ONLY a JSON array of 8 keyword strings. Each should be 2-4 words.`, {
+      temperature: 0.7,
+      maxTokens: 300,
+      systemPrompt: 'Trend forecasting expert. Return only a JSON array of 8 trending product keyword strings.',
+    });
+
+    if (!Array.isArray(keywords)) {
+      return res.status(500).json({ success: false, error: 'AI failed to generate keywords' });
+    }
+
+    // Now analyze these keywords for trend data
+    const { batchAggregateTrends } = await import('../services/trends');
+    const trends = await batchAggregateTrends(keywords);
+
+    // Sort by score descending
+    trends.sort((a: any, b: any) => (b.overallScore || 0) - (a.overallScore || 0));
+
+    res.json({ success: true, data: trends, keywords });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get early viral products — products detected 1-2 weeks before breakout
+router.get('/trends/viral-products', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+
+    // Find products with high viral scores from recent research
+    const candidates = await prisma.candidateProduct.findMany({
+      where: {
+        shopId,
+        status: { in: ['CANDIDATE', 'APPROVED'] },
+        score: {
+          visualVirality: { gte: 50 },
+        },
+      },
+      include: { score: true },
+      orderBy: { score: { visualVirality: 'desc' } },
+      take: 20,
+    });
+
+    // Classify each by viral stage
+    const viralProducts = candidates.map((c: any) => {
+      const vs = c.score?.visualVirality || 0;
+      const orders = c.orderVolume || 0;
+      let stage = 'stable_trend';
+      let timeAdvantage = '0 days';
+
+      if (vs >= 80 && orders < 5000) { stage = 'early_acceleration'; timeAdvantage = '2-3 weeks early'; }
+      else if (vs >= 65 && orders < 10000) { stage = 'breakout_candidate'; timeAdvantage = '1-2 weeks early'; }
+      else if (vs >= 50 && orders < 50000) { stage = 'rising_trend'; timeAdvantage = '1 week early'; }
+      else if (orders >= 50000) { stage = 'saturated'; timeAdvantage = 'already mainstream'; }
+
+      return {
+        id: c.id,
+        title: c.title,
+        category: c.category,
+        imageUrl: c.imageUrls?.[0],
+        price: c.suggestedPrice,
+        cost: c.costPrice,
+        orders,
+        viralScore: vs,
+        finalScore: c.score?.finalScore || 0,
+        storeFitScore: c.score?.storeFit || 0,
+        stage,
+        timeAdvantage,
+        explanation: c.score?.explanation,
+        fitReasons: c.score?.fitReasons || [],
+        sourceName: c.sourceName,
+        status: c.status,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: viralProducts,
+      summary: {
+        total: viralProducts.length,
+        earlyAcceleration: viralProducts.filter((p: any) => p.stage === 'early_acceleration').length,
+        breakoutCandidates: viralProducts.filter((p: any) => p.stage === 'breakout_candidate').length,
+        risingTrends: viralProducts.filter((p: any) => p.stage === 'rising_trend').length,
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/trends/keyword/:keyword', async (req: Request, res: Response) => {
   try {
     const { keyword } = req.params;
