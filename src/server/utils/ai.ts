@@ -130,16 +130,30 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
 }
 
 /**
- * Main AI completion — uses Gemini if available, falls back to OpenAI
+ * Main AI completion — uses Gemini if available, falls back to OpenAI on failure
  */
 export async function aiComplete<T = string>(
   prompt: string,
   options: AICompletionOptions = {}
 ): Promise<T> {
+  // Try Gemini first
   if (process.env.GEMINI_API_KEY) {
-    return geminiComplete<T>(prompt, options);
+    try {
+      return await geminiComplete<T>(prompt, options);
+    } catch (err: any) {
+      // If Gemini fails (429, 500, etc.) and OpenAI is available, fall back
+      if (process.env.OPENAI_API_KEY) {
+        console.warn(`[AI] Gemini failed (${err.message?.slice(0, 60)}), falling back to OpenAI`);
+        return openaiComplete<T>(prompt, options);
+      }
+      throw err; // No fallback available
+    }
   }
-  return openaiComplete<T>(prompt, options);
+  // No Gemini key — use OpenAI directly
+  if (process.env.OPENAI_API_KEY) {
+    return openaiComplete<T>(prompt, options);
+  }
+  throw new Error('No AI API key configured (set GEMINI_API_KEY or OPENAI_API_KEY)');
 }
 
 /**

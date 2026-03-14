@@ -18,8 +18,10 @@ import { StoreDNA, NormalizedProduct, MerchantSettingsData, DEFAULT_SCORE_WEIGHT
 export interface ResearchResult {
   batchId: string;
   totalFetched: number;
+  totalRelevant?: number;
   totalScored: number;
   totalSaved: number;
+  message?: string;
   topCandidates: { title: string; category: string; finalScore: number; explanation: string; }[];
 }
 
@@ -272,7 +274,20 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
 
   // Step 6: Save results
-  // Clear old non-imported candidates
+  // Only clear old candidates if we actually found new ones
+  if (scored.length === 0) {
+    console.warn(`[Research] ⚠️ Scoring returned 0 products — keeping existing candidates`);
+    return {
+      totalFetched: allProducts.length,
+      totalRelevant: relevant.length,
+      totalScored: 0,
+      totalSaved: 0,
+      batchId,
+      message: 'AI scoring returned 0 products. This usually means the AI service is rate-limited. Please wait a minute and try again.',
+      topCandidates: [],
+    };
+  }
+
   const deletedOld = await prisma.candidateProduct.deleteMany({
     where: { shopId, status: { in: ['CANDIDATE', 'REJECTED'] }, importedProduct: null },
   });

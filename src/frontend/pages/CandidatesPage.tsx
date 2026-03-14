@@ -195,7 +195,13 @@ export function CandidatesPage() {
       const result = await apiFetch<any>('/research/start', { method: 'POST' });
       clearInterval(interval);
       setResearchProgress(100);
-      setResearchStage(`✅ Research complete! Found ${result.data?.totalSaved || 0} winning products.`);
+      const saved = result.data?.totalSaved || 0;
+      if (saved === 0 && result.data?.message) {
+        setResearchStage('');
+        setMsg(friendlyError(result.data.message));
+      } else {
+        setResearchStage(`✅ Research complete! Found ${saved} winning products.`);
+      }
       await get('/candidates?status=CANDIDATE&sort=score');
       setTimeout(() => { setResearchRunning(false); }, 2000);
     } catch (err: any) {
