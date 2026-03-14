@@ -4,7 +4,7 @@
 // Fast, accurate, essentially free for this volume.
 // Falls back to OpenAI if GEMINI_API_KEY not set.
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
 // External API tracker (lazy import to avoid circular deps)
 function trackApi(name: string, success: boolean, latency: number, error?: string) {

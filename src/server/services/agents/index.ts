@@ -83,6 +83,16 @@ export async function profitAgent(product: NormalizedProduct): Promise<AgentResu
   let score = 0;
   const signals: string[] = [];
 
+  // If no price data available, give a moderate default score (don't penalize)
+  if (cost <= 0 && price <= 0) {
+    return {
+      score: 55,
+      confidence: 0.3,
+      reasoning: 'Price data unavailable — moderate default score',
+      signals: ['Price data not provided by supplier'],
+    };
+  }
+
   if (margin >= 70) { score = 95; signals.push('Excellent margin >70%'); }
   else if (margin >= 60) { score = 85; signals.push('Strong margin >60%'); }
   else if (margin >= 50) { score = 75; signals.push('Good margin >50%'); }
