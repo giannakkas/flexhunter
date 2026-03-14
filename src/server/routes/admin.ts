@@ -431,9 +431,9 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── Google Trends (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('Google Trends (RapidAPI)', async () => {
-      const params = new URLSearchParams({ keyword: 'gadget', property: '', geo: '', dataSource: 'web' });
-      const r = await fetch(`https://google-trends8.p.rapidapi.com/interestOverTime?${params}`, {
-        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
+      const today = new Date().toISOString().split('T')[0];
+      const r = await fetch(`https://google-trends8.p.rapidapi.com/trendings?region_code=US&date=${today}&hl=en-US`, {
+        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com', 'Content-Type': 'application/json' },
         signal: AbortSignal.timeout(8000),
       });
       if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
