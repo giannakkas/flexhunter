@@ -273,6 +273,71 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
   console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
 
+  // Step 5.5: Enrich top 5 with REAL trend data (Google, TikTok, Amazon)
+  // Run ALL in parallel with 10s timeout cap — never blocks research
+  if (scored.length > 0) {
+    console.log(`[Research] Step 5.5: Enriching top ${Math.min(scored.length, 5)} with real trend data (parallel)...`);
+    try {
+      const { aggregateTrend } = await import('../trends');
+      const topProducts = scored.slice(0, 5);
+
+      // Run ALL trend checks in parallel with 10s total timeout
+      const trendPromises = topProducts.map(async (product) => {
+        try {
+          const searchTerms = product.title
+            .replace(/[^a-zA-Z\s]/g, '')
+            .split(/\s+/)
+            .filter((w: string) => w.length > 3 && !['with', 'from', 'this', 'that', 'more', 'pack', 'size'].includes(w.toLowerCase()))
+            .slice(0, 3)
+            .join(' ');
+
+          if (searchTerms.length <= 5) return;
+
+          const trend = await aggregateTrend(searchTerms);
+          if (trend.confidence <= 0) return;
+
+          const trendBoost = Math.round((trend.overallScore - 40) * 0.4);
+          product.agentScore.viralPrediction.viralScore = Math.min(100, Math.max(0, product.agentScore.viralPrediction.viralScore + trendBoost));
+
+          if (trend.trendDirection === 'surging') {
+            product.agentScore.viralPrediction.trendStage = 'early_acceleration';
+            product.agentScore.viralPrediction.signals.push('🌊 Confirmed surging across Google/TikTok/Amazon');
+          } else if (trend.trendDirection === 'rising') {
+            if (product.agentScore.viralPrediction.trendStage === 'stable_trend') {
+              product.agentScore.viralPrediction.trendStage = 'rising_trend';
+            }
+            product.agentScore.viralPrediction.signals.push('📈 Rising trend confirmed by real data');
+          } else if (trend.trendDirection === 'declining') {
+            product.agentScore.viralPrediction.trendStage = 'saturated';
+            product.agentScore.viralPrediction.signals.push('📉 Declining — real data shows weakening demand');
+          }
+
+          // Recalculate final score
+          const w = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
+          product.agentScore.finalScore = Math.round(
+            product.agentScore.storeFit.score * w.storeFit +
+            product.agentScore.profitability.score * w.profitability +
+            product.agentScore.trendPotential.score * w.trendPotential +
+            product.agentScore.viralPrediction.viralScore * w.viralPrediction +
+            product.agentScore.saturation.score * w.saturation +
+            product.agentScore.supplierQuality.score * w.supplierQuality
+          );
+        } catch {}
+      });
+
+      // Wait for all parallel checks OR 10s — whichever comes first
+      await Promise.race([
+        Promise.allSettled(trendPromises),
+        new Promise(resolve => setTimeout(resolve, 10_000)),
+      ]);
+
+      scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
+      console.log(`[Research] Step 5.5: Trend enrichment complete`);
+    } catch (err: any) {
+      console.warn(`[Research] Trend enrichment skipped: ${err.message}`);
+    }
+  }
+
   // Step 6: Save results
   // Only clear old candidates if we actually found new ones
   if (scored.length === 0) {
