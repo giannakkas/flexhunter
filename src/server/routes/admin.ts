@@ -364,8 +364,8 @@ router.get('/api-health', async (_req: Request, res: Response) => {
 
   // ── Gemini AI ──
   if (process.env.GEMINI_API_KEY) {
-    await testApi('Gemini 2.5 Flash', async () => {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    await testApi('Gemini AI', async () => {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
         signal: AbortSignal.timeout(8000),
@@ -374,7 +374,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
       return { ok: true, detail: 'Connected & responding' };
     });
   } else {
-    results.push({ name: 'Gemini 2.5 Flash', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
+    results.push({ name: 'Gemini AI', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
   }
 
   // ── OpenAI ──

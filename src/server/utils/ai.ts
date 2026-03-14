@@ -4,7 +4,12 @@
 // Fast, accurate, essentially free for this volume.
 // Falls back to OpenAI if GEMINI_API_KEY not set.
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const GEMINI_MODELS = [
+  'gemini-2.0-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+];
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // External API tracker (lazy import to avoid circular deps)
 function trackApi(name: string, success: boolean, latency: number, error?: string) {
@@ -43,42 +48,47 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
   }
   contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-  try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents,
-        generationConfig: {
-          temperature,
-          maxOutputTokens: maxTokens,
-          responseMimeType: 'application/json',
-        },
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      trackApi('Gemini AI', false, Date.now() - start, `${res.status}: ${err.slice(0, 100)}`);
-      throw new Error(`Gemini API error ${res.status}: ${err.slice(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    trackApi('Gemini AI', true, Date.now() - start);
-
+  // Try each model until one works
+  for (const model of GEMINI_MODELS) {
     try {
-      const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned) as T;
-    } catch {
-      return text as T;
+      const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            temperature,
+            maxOutputTokens: maxTokens,
+            responseMimeType: 'application/json',
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        console.warn(`[AI] Gemini ${model} failed: ${res.status}`);
+        trackApi(`Gemini ${model}`, false, Date.now() - start, `${res.status}: ${err.slice(0, 60)}`);
+        continue; // Try next model
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      trackApi(`Gemini ${model}`, true, Date.now() - start);
+
+      try {
+        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        return JSON.parse(cleaned) as T;
+      } catch {
+        return text as T;
+      }
+    } catch (err: any) {
+      console.warn(`[AI] Gemini ${model} error: ${err.message?.slice(0, 60)}`);
+      trackApi(`Gemini ${model}`, false, Date.now() - start, err.message);
     }
-  } catch (err: any) {
-    if (!err.message.includes('Gemini API error')) {
-      trackApi('Gemini AI', false, Date.now() - start, err.message);
-    }
-    throw err;
   }
+
+  // All Gemini models failed
+  throw new Error('All Gemini models failed');
 }
 
 /**

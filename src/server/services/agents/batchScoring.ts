@@ -47,78 +47,46 @@ export async function batchAIScore(
   const storeDesc = dna.description || settings.storeDescription || 'dropshipping store';
 
   const productSummaries = products.map((p, i) => {
-    const margin = p.suggestedPrice && p.costPrice ? ((p.suggestedPrice - p.costPrice) / p.suggestedPrice * 100).toFixed(0) : '?';
-    return `${i}. "${p.title}" | Cat: ${p.category || '?'} | $${p.suggestedPrice || '?'} (cost: $${p.costPrice || '?'}, margin: ${margin}%) | ${p.orderVolume || 0} orders | ${p.reviewRating || 0}★ | Ships: ${p.shippingDays || '?'}d from ${p.warehouseCountry || 'CN'}`;
+    return `${i}. "${p.title.slice(0, 60)}" | $${p.suggestedPrice || '?'} cost:$${p.costPrice || '?'} | ${p.orderVolume || 0} orders | ${p.reviewRating || 0}★`;
   }).join('\n');
 
-  const prompt = `You are an expert product analyst for a store that sells: "${storeDesc}"
-Target audience: ${settings.targetAudience?.join(', ') || 'general'}
-Price range: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}
+  const prompt = `Score ${products.length} products for a "${storeDesc}" store. Price range: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}.
 
-Score these ${products.length} products. For EACH product, evaluate:
-
-1. storeFit (0-100): Does this product belong in this store?
-2. saturation (0-100): Market opportunity. 100=untapped, 0=oversaturated
-3. viralScore (0-100): TikTok/social media viral potential
-4. trendStage: "early_acceleration" | "breakout_candidate" | "rising_trend" | "stable_trend" | "saturated"
-5. winnerScore (0-100): Overall "winning product" potential combining ALL factors below:
-   - Is it a PROBLEM-SOLVING product? (solves a clear pain point)
-   - Does it have a WOW FACTOR? (makes people say "I need this!")
-   - Is it AD-FRIENDLY? (easy to demonstrate in a 15-30 sec video)
-   - Is it GIFT-WORTHY? (something people buy for others)
-   - Is it at an IMPULSE PRICE? ($15-45 sweet spot)
-   - Does it have REPEAT PURCHASE potential?
-
-PRODUCTS:
 ${productSummaries}
 
-RULES:
-- Be STRICT with storeFit — unrelated products get storeFit < 20
-- A winning product typically has 3+ of: problem-solving, wow-factor, ad-friendly, impulse-price
-- Products with high orders AND high viral potential = breakout
-- Products with low orders BUT high viral = early_acceleration (MOST VALUABLE — 1-2 weeks early)
-- Products with 50K+ orders = saturated unless niche-specific
+For each product return: storeFit(0-100), saturation(0-100), viralScore(0-100), trendStage, winnerScore(0-100), storeFitReason(short), viralReason(short), problemSolving(bool), wowFactor(bool), adFriendly(bool), giftWorthy(bool), impulsePrice(bool).
 
-Return ONLY a JSON array with one object per product:
-[
-  {
-    "storeFit": number,
-    "saturation": number,
-    "viralScore": number,
-    "trendStage": "string",
-    "winnerScore": number,
-    "storeFitReason": "1 sentence",
-    "saturationReason": "1 sentence",
-    "viralReason": "1 sentence",
-    "storeFitSignals": ["reason1", "reason2"],
-    "winnerSignals": ["signal1", "signal2"],
-    "isTikTokFriendly": boolean,
-    "adFriendly": boolean,
-    "problemSolving": boolean,
-    "wowFactor": boolean,
-    "giftWorthy": boolean,
-    "impulsePrice": boolean,
-    "repeatPurchase": boolean
-  }
-]`;
+trendStage options: early_acceleration, breakout_candidate, rising_trend, stable_trend, saturated.
 
-  try {
-    const results = await aiComplete<BatchAIResult[]>(prompt, {
-      temperature: 0.2,
-      maxTokens: 300 * products.length,
-      systemPrompt: `Product analyst for "${storeDesc}" store. Score ALL ${products.length} products. Return a JSON array of ${products.length} objects. Be STRICT with store fit.`,
-    });
+Return ONLY a JSON array of ${products.length} objects:
+[{"storeFit":70,"saturation":60,"viralScore":55,"trendStage":"rising_trend","winnerScore":65,"storeFitReason":"fits outdoor niche","viralReason":"shareable design","problemSolving":true,"wowFactor":false,"adFriendly":true,"giftWorthy":false,"impulsePrice":true}]`;
 
-    if (Array.isArray(results) && results.length > 0) {
-      // Pad with nulls if AI returned fewer results
-      while (results.length < products.length) results.push(null as any);
-      return results;
+  // Try up to 2 times
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const results = await aiComplete<BatchAIResult[]>(prompt, {
+        temperature: 0.2,
+        maxTokens: 200 * products.length,
+        systemPrompt: `Product analyst. Return ONLY a JSON array of ${products.length} objects. No markdown, no explanation.`,
+      });
+
+      if (Array.isArray(results) && results.length > 0) {
+        while (results.length < products.length) results.push(null as any);
+        console.log(`[BatchScore] AI scored ${results.filter(Boolean).length}/${products.length} products (attempt ${attempt})`);
+        return results;
+      }
+      console.warn(`[BatchScore] AI returned non-array (attempt ${attempt}):`, typeof results);
+    } catch (err: any) {
+      console.warn(`[BatchScore] AI failed (attempt ${attempt}): ${err.message?.slice(0, 100)}`);
+      if (attempt === 1) {
+        // Wait 2s before retry
+        await new Promise(r => setTimeout(r, 2000));
+      }
     }
-    return products.map(() => null);
-  } catch (err: any) {
-    console.warn(`[BatchScore] AI failed: ${err.message}`);
-    return products.map(() => null);
   }
+
+  console.warn(`[BatchScore] All attempts failed — using algorithmic fallback`);
+  return products.map(() => null);
 }
 
 /**
