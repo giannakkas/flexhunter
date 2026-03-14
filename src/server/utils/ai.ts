@@ -9,6 +9,14 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemi
 // External API tracker (lazy import to avoid circular deps)
 function trackApi(name: string, success: boolean, latency: number, error?: string) {
   try { const { trackExternalApi } = require('../middleware/apiMetrics'); trackExternalApi(name, success, latency, error); } catch {}
+  // Alert admin on failures
+  if (!success && error) {
+    try {
+      const status = error.match(/(\d{3})/)?.[1];
+      const { checkAndAlertApiError } = require('../services/adminAlerts');
+      checkAndAlertApiError(name, parseInt(status || '500'), error);
+    } catch {}
+  }
 }
 
 export interface AICompletionOptions {

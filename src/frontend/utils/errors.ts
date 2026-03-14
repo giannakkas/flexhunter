@@ -6,14 +6,15 @@
 const ERROR_MAP: [RegExp, string][] = [
   [/429.*quota|exceeded.*quota|rate.?limit/i, 'Our AI is temporarily busy. Please wait a minute and try again.'],
   [/401.*unauthorized|invalid.*token|unrecognized login/i, 'Shopify connection expired. Please reinstall the app from your Shopify admin.'],
-  [/403.*forbidden|not subscribed/i, 'This feature requires an API subscription. Contact support for help.'],
+  [/403.*forbidden|not subscribed|subscription/i, 'This feature is temporarily unavailable. Please try again later.'],
   [/500.*internal/i, 'Something went wrong on our end. Please try again in a moment.'],
   [/504.*timeout|timed? ?out/i, 'The request took too long. Please try again with fewer items.'],
-  [/GEMINI_API_KEY|OPENAI_API_KEY|API.*not.*set/i, 'AI service is not configured. Please contact support.'],
+  [/GEMINI_API_KEY|OPENAI_API_KEY|API.*not.*set|not.*configured/i, 'This feature is temporarily unavailable. Please try again later.'],
   [/no.*product.*source|no.*provider/i, 'Product search is temporarily unavailable. Please try again later.'],
   [/network|fetch|ECONNREFUSED|ENOTFOUND/i, 'Network connection issue. Please check your internet and try again.'],
-  [/prisma|database|unique constraint/i, 'A database error occurred. Please try again.'],
-  [/JSON.*parse|unexpected token/i, 'Received an unexpected response. Please try again.'],
+  [/prisma|database|unique constraint/i, 'Something went wrong. Please try again.'],
+  [/JSON.*parse|unexpected token/i, 'Something went wrong. Please try again.'],
+  [/rapidapi|subscribe|api.*key/i, 'This feature is temporarily unavailable. Please try again later.'],
 ];
 
 export function friendlyError(rawError: string): string {

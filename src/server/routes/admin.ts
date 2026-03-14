@@ -260,6 +260,20 @@ router.get('/export/:type', async (req: Request, res: Response) => {
   }
 });
 
+// ── Admin Alerts ──────────────────────────────
+router.get('/alerts', async (_req: Request, res: Response) => {
+  const { getAdminAlerts, getUnacknowledgedCount } = await import('../services/adminAlerts');
+  const alerts = await getAdminAlerts();
+  const unread = await getUnacknowledgedCount();
+  res.json({ alerts, unread });
+});
+
+router.post('/alerts/:id/acknowledge', async (req: Request, res: Response) => {
+  const { acknowledgeAlert } = await import('../services/adminAlerts');
+  await acknowledgeAlert(req.params.id);
+  res.json({ success: true });
+});
+
 // ── Flush Cache ───────────────────────────────
 router.post('/cache/flush', async (_req: Request, res: Response) => {
   await cache.invalidatePrefix('');

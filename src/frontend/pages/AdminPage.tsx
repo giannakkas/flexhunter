@@ -29,6 +29,8 @@ export function AdminPage() {
   const [stats, setStats] = useState<any>(null);
   const [apiMetrics, setApiMetrics] = useState<any>(null);
   const [apiHealth, setApiHealth] = useState<any>(null);
+  const [alerts, setAlerts] = useState<any[]>([]);
+  const [alertCount, setAlertCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
@@ -40,15 +42,17 @@ export function AdminPage() {
     setLoading(true);
     setError(null);
     try {
-      const [ov, sh, st, am, ah] = await Promise.all([
+      const [ov, sh, st, am, ah, al] = await Promise.all([
         fetch('/api/admin/overview', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/shops', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/stats', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/api-metrics', { headers: headers() }).then(r => r.json()),
         fetch('/api/admin/api-health', { headers: headers() }).then(r => r.json()),
+        fetch('/api/admin/alerts', { headers: headers() }).then(r => r.json()).catch(() => ({ alerts: [], unread: 0 })),
       ]);
       if (ov.error) throw new Error(ov.error);
       setOverview(ov); setShops(sh.shops || []); setStats(st); setApiMetrics(am); setApiHealth(ah);
+      setAlerts(al.alerts || []); setAlertCount(al.unread || 0);
       setAuthed(true);
       localStorage.setItem('admin_secret', secret);
     } catch (e: any) { setError(e.message); setAuthed(false); }
@@ -103,6 +107,7 @@ export function AdminPage() {
     { id: 'overview', content: '📊 Overview' },
     { id: 'apis', content: '🔌 API Monitor' },
     { id: 'shops', content: '🏪 Shops' },
+    { id: 'alerts', content: `🔔 Alerts (${alertCount})` },
     { id: 'errors', content: `⚠️ Errors (${(overview?.recentErrors?.length || 0) + recentApiErrors.length})` },
   ];
 
@@ -378,8 +383,55 @@ export function AdminPage() {
             </BlockStack>
           )}
 
-          {/* ── Tab 3: Errors ── */}
+          {/* ── Tab 3: Alerts ── */}
           {tab === 3 && (
+            <BlockStack gap="400">
+              <div style={{ height: 12 }} />
+              <Card>
+                <BlockStack gap="300">
+                  <InlineStack align="space-between">
+                    <Text as="h2" variant="headingSm">🔔 Admin Alerts ({alerts.length})</Text>
+                    {alertCount > 0 && <Badge tone="critical">{alertCount} unacknowledged</Badge>}
+                  </InlineStack>
+                  {alerts.length === 0 ? (
+                    <Text as="p" variant="bodySm" tone="subdued">No alerts — everything is running smoothly.</Text>
+                  ) : (
+                    <BlockStack gap="200">
+                      {alerts.slice(0, 30).map((a: any) => (
+                        <div key={a.id} style={{
+                          padding: '10px 14px', borderRadius: 8,
+                          background: a.level === 'critical' ? '#FEF2F2' : '#FFFBEB',
+                          border: `1px solid ${a.level === 'critical' ? '#FECACA' : '#FDE68A'}`,
+                          opacity: a.acknowledged ? 0.6 : 1,
+                        }}>
+                          <InlineStack align="space-between" blockAlign="start">
+                            <BlockStack gap="100">
+                              <InlineStack gap="200">
+                                <Badge tone={a.level === 'critical' ? 'critical' : 'warning'}>{a.category}</Badge>
+                                {a.acknowledged && <Badge tone="info">Acknowledged</Badge>}
+                              </InlineStack>
+                              <Text as="p" variant="bodySm" fontWeight="bold">{a.message}</Text>
+                              {a.detail && <Text as="p" variant="bodySm" tone="subdued">{a.detail.slice(0, 200)}</Text>}
+                              <Text as="p" variant="bodySm" tone="subdued">{new Date(a.timestamp).toLocaleString()}</Text>
+                            </BlockStack>
+                            {!a.acknowledged && (
+                              <Button size="slim" onClick={async () => {
+                                await fetch(`/api/admin/alerts/${a.id}/acknowledge`, { method: 'POST', headers: headers() });
+                                fetchAll();
+                              }}>✓ Ack</Button>
+                            )}
+                          </InlineStack>
+                        </div>
+                      ))}
+                    </BlockStack>
+                  )}
+                </BlockStack>
+              </Card>
+            </BlockStack>
+          )}
+
+          {/* ── Tab 4: Errors ── */}
+          {tab === 4 && (
             <BlockStack gap="400">
               <div style={{ height: 12 }} />
 
