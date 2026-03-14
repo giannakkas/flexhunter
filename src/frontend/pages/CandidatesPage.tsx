@@ -193,18 +193,45 @@ export function CandidatesPage() {
     }, 500);
 
     try {
-      const result = await apiFetch<any>('/research/start', { method: 'POST' });
-      clearInterval(interval);
-      setResearchProgress(100);
-      const saved = result.data?.totalSaved || 0;
-      if (saved === 0 && result.data?.message) {
-        setResearchStage('');
-        setMsg(friendlyError(result.data.message));
-      } else {
-        setResearchStage(`✅ Research complete! Found ${saved} winning products.`);
-      }
-      await get('/candidates?status=CANDIDATE&sort=score');
-      setTimeout(() => { setResearchRunning(false); }, 2000);
+      // Start research — returns immediately
+      await apiFetch<any>('/research/start', { method: 'POST' });
+
+      // Poll for completion every 3 seconds
+      const pollForResults = async () => {
+        for (let i = 0; i < 60; i++) { // max 3 minutes
+          await new Promise(r => setTimeout(r, 3000));
+          try {
+            const status = await apiFetch<any>('/research/status');
+            const job = status.data;
+            if (!job) continue;
+
+            if (job.status === 'COMPLETED') {
+              clearInterval(interval);
+              setResearchProgress(100);
+              const saved = (job.result as any)?.totalSaved || 0;
+              setResearchStage(`✅ Research complete! Found ${saved} winning products.`);
+              await get('/candidates?status=CANDIDATE&sort=score');
+              setTimeout(() => { setResearchRunning(false); }, 2000);
+              return;
+            }
+            if (job.status === 'FAILED') {
+              clearInterval(interval);
+              setResearchRunning(false);
+              setMsg(friendlyError(job.error || 'Research failed'));
+              return;
+            }
+            // Still running — continue polling
+          } catch {}
+        }
+        // Timeout after 3 min of polling
+        clearInterval(interval);
+        setResearchRunning(false);
+        // Try loading whatever was saved
+        await get('/candidates?status=CANDIDATE&sort=score');
+        setMsg('Research is taking longer than expected. Check back in a moment.');
+      };
+
+      pollForResults();
     } catch (err: any) {
       clearInterval(interval);
       setResearchRunning(false);

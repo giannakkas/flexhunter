@@ -394,37 +394,54 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
       });
     }
 
-    const { runResearchPipeline } = await import('../services/research/researchPipeline');
-    const result = await runResearchPipeline(shopId);
+    // Check if already running
+    const running = await prisma.jobRun.findFirst({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
+    });
+    if (running) {
+      return res.json({ success: true, message: 'Research already running...', data: { status: 'RUNNING' } });
+    }
 
-    await prisma.jobRun.create({
-      data: {
-        shopId,
-        jobType: 'RESEARCH_PRODUCTS',
-        status: 'COMPLETED',
-        result: result as any,
-        startedAt: new Date(),
-        completedAt: new Date(),
-        progress: 100,
-      },
-    }).catch(() => {});
+    // Create job record immediately
+    const job = await prisma.jobRun.create({
+      data: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', startedAt: new Date(), progress: 0 },
+    });
 
-    console.log(`[Research] Completed: ${result.totalSaved} products saved`);
-    logger.info('Research complete', { shopId, saved: result.totalSaved, fetched: result.totalFetched });
-    await cache.invalidatePrefix(`dashboard:${shopId}`);
-    await cache.invalidatePrefix(`candidates:${shopId}`);
+    // Return immediately — research runs in background
+    res.json({ success: true, message: 'Research started! Checking for products...', data: { status: 'RUNNING', jobId: job.id } });
 
-    // Notify merchant
-    try {
-      const { notify } = await import('../services/notifications');
-      await notify(shopId, 'success', `Research found ${result.totalSaved} products`,
-        `AI analyzed ${result.totalFetched} products and selected ${result.totalSaved} winners for your store.`,
-        { label: 'View Products', url: '/candidates' });
-    } catch {}
+    // Run research in background (fire-and-forget)
+    (async () => {
+      try {
+        const { runResearchPipeline } = await import('../services/research/researchPipeline');
+        const result = await runResearchPipeline(shopId);
 
-    res.json({ success: true, message: 'Research complete', data: result });
+        await prisma.jobRun.update({
+          where: { id: job.id },
+          data: { status: 'COMPLETED', result: result as any, completedAt: new Date(), progress: 100 },
+        });
+
+        console.log(`[Research] Completed: ${result.totalSaved} products saved`);
+        logger.info('Research complete', { shopId, saved: result.totalSaved, fetched: result.totalFetched });
+        await cache.invalidatePrefix(`dashboard:${shopId}`);
+        await cache.invalidatePrefix(`candidates:${shopId}`);
+
+        try {
+          const { notify } = await import('../services/notifications');
+          await notify(shopId, 'success', `Research found ${result.totalSaved} products`,
+            `AI analyzed ${result.totalFetched} products and selected ${result.totalSaved} winners for your store.`,
+            { label: 'View Products', url: '/candidates' });
+        } catch {}
+      } catch (err: any) {
+        console.error('[Research] Background FAILED:', err.message);
+        await prisma.jobRun.update({
+          where: { id: job.id },
+          data: { status: 'FAILED', error: err.message, completedAt: new Date() },
+        }).catch(() => {});
+      }
+    })();
   } catch (err: any) {
-    console.error('[Research] FAILED:', err.message, err.stack);
+    console.error('[Research] FAILED:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
