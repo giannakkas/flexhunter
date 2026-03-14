@@ -140,52 +140,48 @@ export async function runBatchMultiAgentScoring(
     const product = products[i];
     const ai = aiResults[i];
 
-    if (!ai) {
-      results.push(null);
-      continue;
-    }
-
-    // Algorithmic agents (free, no AI)
+    // Algorithmic agents (free, no AI calls)
     const profit = await profitAgent(product);
     const trend = await trendAgent(product);
     const supplier = supplierQualityAgent(product);
 
-    // Convert batch AI result to agent format
+    // If AI failed, use algorithmic-only defaults
     const storeFit: AgentResult = {
-      score: Math.min(100, Math.max(0, ai.storeFit || 0)),
-      confidence: 0.7,
-      reasoning: ai.storeFitReason || 'AI scored',
-      signals: ai.storeFitSignals || [],
+      score: Math.min(100, Math.max(0, ai?.storeFit || 60)),
+      confidence: ai ? 0.7 : 0.3,
+      reasoning: ai?.storeFitReason || 'Scored without AI — moderate default',
+      signals: ai?.storeFitSignals || [],
     };
 
     const saturation: AgentResult = {
-      score: Math.min(100, Math.max(0, ai.saturation || 50)),
-      confidence: 0.6,
-      reasoning: ai.saturationReason || 'AI scored',
+      score: Math.min(100, Math.max(0, ai?.saturation || 50)),
+      confidence: ai ? 0.6 : 0.3,
+      reasoning: ai?.saturationReason || 'Default — no AI data',
       signals: [],
     };
 
     const viral: ViralPrediction = {
-      viralScore: Math.min(100, Math.max(0, ai.viralScore || 30)),
-      trendStage: (ai.trendStage as any) || 'stable_trend',
-      velocity7d: ai.viralScore > 60 ? 25 : 5,
-      accelerationRate: ai.trendStage === 'early_acceleration' ? 2.1 : 1.0,
-      confidence: 0.6,
+      viralScore: Math.min(100, Math.max(0, ai?.viralScore || 30)),
+      trendStage: (ai?.trendStage as any) || 'stable_trend',
+      velocity7d: (ai?.viralScore || 30) > 60 ? 25 : 5,
+      accelerationRate: ai?.trendStage === 'early_acceleration' ? 2.1 : 1.0,
+      confidence: ai ? 0.6 : 0.3,
       signals: [
-        ai.viralReason || '',
-        ai.isTikTokFriendly ? 'TikTok-friendly product' : '',
-        ai.adFriendly ? '📹 Easy to demo in ads' : '',
-        ai.problemSolving ? '🎯 Solves a clear problem' : '',
-        ai.wowFactor ? '✨ High wow factor' : '',
-        ai.giftWorthy ? '🎁 Gift-worthy' : '',
-        ai.impulsePrice ? '💰 Impulse-buy price range' : '',
-        ai.repeatPurchase ? '🔄 Repeat purchase potential' : '',
+        ai?.viralReason || '',
+        ai?.isTikTokFriendly ? 'TikTok-friendly product' : '',
+        ai?.adFriendly ? '📹 Easy to demo in ads' : '',
+        ai?.problemSolving ? '🎯 Solves a clear problem' : '',
+        ai?.wowFactor ? '✨ High wow factor' : '',
+        ai?.giftWorthy ? '🎁 Gift-worthy' : '',
+        ai?.impulsePrice ? '💰 Impulse-buy price range' : '',
+        ai?.repeatPurchase ? '🔄 Repeat purchase potential' : '',
+        !ai ? '⚠️ AI unavailable — algorithmic score only' : '',
       ].filter(Boolean),
-      explanation: ai.viralReason || `${ai.trendStage} with ${ai.viralScore}/100 viral potential`,
+      explanation: ai?.viralReason || `${ai?.trendStage || 'stable'} — ${ai ? 'AI scored' : 'algorithmic only'}`,
     };
 
     // Use winnerScore to boost final score
-    const winnerBonus = ((ai.winnerScore || 0) - 50) * 0.1; // -5 to +5 points
+    const winnerBonus = ((ai?.winnerScore || 50) - 50) * 0.1; // -5 to +5 points
 
     // Weighted score
     const WEIGHTS = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
@@ -212,7 +208,7 @@ export async function runBatchMultiAgentScoring(
       recommendation = 'strong_buy';
     }
 
-    const winnerSignalsList = (ai.winnerSignals || []).slice(0, 3).join(', ');
+    const winnerSignalsList = (ai?.winnerSignals || []).slice(0, 3).join(', ');
 
     results.push({
       storeFit,
@@ -223,7 +219,7 @@ export async function runBatchMultiAgentScoring(
       supplierQuality: supplier,
       finalScore,
       recommendation,
-      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Winner: ${ai.winnerScore || '?'}/100${winnerSignalsList ? ` — ${winnerSignalsList}` : ''}. Supplier: ${supplier.reasoning}.`,
+      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Winner: ${ai?.winnerScore || '?'}/100${winnerSignalsList ? ` — ${winnerSignalsList}` : ''}. Supplier: ${supplier.reasoning}.${!ai ? ' [Scored without AI]' : ''}`,
     });
   }
 
