@@ -410,13 +410,15 @@ router.get('/api-health', async (_req: Request, res: Response) => {
     await testApi('CJ Dropshipping', async () => {
       const r = await fetch('https://developers.cjdropshipping.com/api2.0/v1/authentication/getAccessToken', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: process.env.CJ_API_KEY!.split('@api@')[0]?.replace('CJ', '') + '@test.com', password: 'test' }),
+        body: JSON.stringify({ apiKey: process.env.CJ_API_KEY }),
         signal: AbortSignal.timeout(8000),
       });
-      // CJ returns 200 even on auth failure, check response
       if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
-      // If we get a response, the API is reachable
-      return { ok: true, detail: 'API reachable — key configured' };
+      const data = await r.json();
+      if (data.code === 200 && data.data?.accessToken) {
+        return { ok: true, detail: 'Authenticated — token received' };
+      }
+      return { ok: false, detail: data.message || 'Auth failed' };
     });
   } else {
     results.push({ name: 'CJ Dropshipping', status: 'not_configured', latency: 0, detail: 'CJ_API_KEY not set', configured: false });
@@ -425,7 +427,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── Google Trends (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('Google Trends (RapidAPI)', async () => {
-      const r = await fetch('https://google-trends8.p.rapidapi.com/trendings?region_code=US&hl=en', {
+      const r = await fetch('https://google-trends8.p.rapidapi.com/interestOverTime?keyword=gadget&geo=US&time=today+1-m', {
         headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
         signal: AbortSignal.timeout(8000),
       });
