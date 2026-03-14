@@ -5,9 +5,8 @@
 // Falls back to OpenAI if GEMINI_API_KEY not set.
 
 const GEMINI_MODELS = [
-  'gemini-2.0-flash-lite',
-  'gemini-2.5-flash',
   'gemini-1.5-flash',
+  'gemini-2.0-flash-lite',
 ];
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 

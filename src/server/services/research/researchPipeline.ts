@@ -81,8 +81,14 @@ Return a JSON array of exactly 15 strings.`;
     console.warn('[Research] Keyword generation failed:', err);
   }
 
-  // Fallback
-  return [...(settings.preferredCategories || []).slice(0, 5), storeDesc].filter(Boolean);
+  // Fallback — use niche keywords from Store DNA
+  const fallback = [
+    ...(dna.nicheKeywords || []).slice(0, 8),
+    ...(settings.preferredCategories || []).slice(0, 3),
+    storeDesc,
+  ].filter(Boolean);
+  console.log(`[Research] Using fallback keywords: ${fallback.join(', ')}`);
+  return fallback;
 }
 
 // ── Step 3: Fetch Products ───────────────────────
@@ -259,13 +265,38 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   }
 
   // Step 4: AI Relevance Filter (fast, batch)
-  const relevant = await filterRelevant(allProducts, storeDesc);
+  let relevant = await filterRelevant(allProducts, storeDesc);
 
   if (relevant.length === 0) {
     // If filter was too strict, take top by order volume as fallback
     console.warn(`[Research] Relevance filter returned 0! Using top ${maxCandidates} by volume.`);
     relevant.push(...allProducts.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates));
   }
+
+  // Step 4.5: Keyword-based store-fit safety net (NO AI needed)
+  // Removes products that clearly don't match the store niche
+  const nicheKeywords = (dna.nicheKeywords || []).map(k => k.toLowerCase());
+  const storeWords = storeDesc.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const allNicheWords = [...new Set([...nicheKeywords, ...storeWords])].filter(Boolean);
+
+  if (allNicheWords.length > 0) {
+    const beforeCount = relevant.length;
+    relevant = relevant.filter(p => {
+      const titleLower = (p.title + ' ' + p.category + ' ' + p.description).toLowerCase();
+      // Product must match at least 1 niche keyword
+      const matches = allNicheWords.some(kw => titleLower.includes(kw));
+      return matches;
+    });
+
+    // If keyword filter removed too many, keep top half by volume
+    if (relevant.length < 5 && beforeCount > 5) {
+      console.warn(`[Research] Keyword filter too strict (${beforeCount} → ${relevant.length}). Relaxing...`);
+      relevant = allProducts.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
+    } else {
+      console.log(`[Research] Step 4.5: Keyword filter: ${beforeCount} → ${relevant.length} (matched niche: ${allNicheWords.slice(0, 5).join(', ')})`);
+    }
+  }
+
   console.log(`[Research] Step 4/6: ${relevant.length} relevant products`);
 
   // Step 5: Multi-Agent Deep Scoring
