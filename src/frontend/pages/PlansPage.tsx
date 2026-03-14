@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -69,7 +70,7 @@ export function PlansPage() {
         setMessage(r.error || 'Failed to create subscription');
       }
     } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
+      setMessage(friendlyError(e.message));
     }
     setLoading(null);
   };

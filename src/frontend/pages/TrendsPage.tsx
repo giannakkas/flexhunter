@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useState, useEffect } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -74,7 +75,7 @@ export function TrendsPage() {
     try {
       const r = await apiFetch<any>('/trends/analyze', { method: 'POST', body: JSON.stringify({ keywords: kws }) });
       setResults(r.data || []);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { setError(friendlyError(e.message)); }
     setLoading(false);
   };
 
@@ -83,7 +84,7 @@ export function TrendsPage() {
     try {
       const r = await apiFetch<any>('/trends/discover', { method: 'POST' });
       setResults(r.data || []);
-    } catch (e: any) { setError(e.message); }
+    } catch (e: any) { setError(friendlyError(e.message)); }
     setDiscoverLoading(false);
   };
 

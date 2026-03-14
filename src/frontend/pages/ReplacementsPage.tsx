@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -60,7 +61,7 @@ export function ReplacementsPage() {
       setScanResult(r.message || `Found ${r.data?.length || 0} suggestions`);
       get('/replacements');
     } catch (e: any) {
-      setScanResult(`Scan failed: ${e.message}`);
+      setScanResult(friendlyError(e.message));
     }
     setScanning(false);
   };

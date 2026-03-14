@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, TextField, Button, Banner,
@@ -44,7 +45,7 @@ export function SeoPage() {
         suggestedHandle: result.data.suggestedHandle,
       });
     } catch (err: any) {
-      setMessage({ text: `Optimization failed: ${err.message}`, tone: 'critical' });
+      setMessage({ text: friendlyError(err.message), tone: 'critical' });
     }
     setLoading(false);
   };
@@ -67,7 +68,7 @@ export function SeoPage() {
       setMessage({ text: 'SEO changes applied successfully!', tone: 'success' });
       setTimeout(() => navigate('/imports'), 1500);
     } catch (err: any) {
-      setMessage({ text: `Failed to apply: ${err.message}`, tone: 'critical' });
+      setMessage({ text: friendlyError(err.message), tone: 'critical' });
     }
     setApplying(false);
   };

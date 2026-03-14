@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -49,7 +50,7 @@ export function ImportsPage() {
       setMessage(r.message || 'Product deleted.');
       setMsgTone('success');
     } catch (e: any) {
-      setMessage(`Delete failed: ${e.message}`);
+      setMessage(friendlyError(e.message));
       setMsgTone('critical');
     }
     setDeleting(false);
@@ -64,7 +65,7 @@ export function ImportsPage() {
       setMessage(r.message || 'All products deleted.');
       setMsgTone('success');
     } catch (e: any) {
-      setMessage(`Delete all failed: ${e.message}`);
+      setMessage(friendlyError(e.message));
       setMsgTone('critical');
     }
     setDeleting(false);

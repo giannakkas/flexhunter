@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -200,14 +201,14 @@ export function CandidatesPage() {
     } catch (err: any) {
       clearInterval(interval);
       setResearchRunning(false);
-      setMsg(`Research failed: ${err.message}`);
+      setMsg(friendlyError(err.message));
     }
   };
 
   const selectProduct = async (id: string) => {
     setBusy(id);
     try { const r = await apiFetch<any>(`/candidates/${id}/select`, { method: 'POST' }); setMsg(r.message || 'Selected!'); }
-    catch (e: any) { setMsg(`Error: ${e.message}`); }
+    catch (e: any) { setMsg(friendlyError(e.message)); }
     await get('/candidates?status=CANDIDATE&sort=score');
     setBusy(null); setPreview(null);
   };

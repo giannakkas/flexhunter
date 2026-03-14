@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -67,7 +68,7 @@ export function ResearchPage() {
         setMessage('AI enhanced your store profile!');
       }
     } catch (e: any) {
-      setMessage(`AI suggestion failed: ${e.message}`);
+      setMessage(friendlyError(e.message));
     }
     setAiSuggesting(false);
   };
@@ -128,7 +129,7 @@ export function ResearchPage() {
       clearInterval(interval);
       setAnalyzing(false);
       setAnalyzeProgress(0);
-      setMessage('Failed: ' + err.message);
+      setMessage(friendlyError(err.message));
     }
   };
 

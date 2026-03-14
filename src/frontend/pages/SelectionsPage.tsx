@@ -1,3 +1,4 @@
+import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
@@ -75,7 +76,7 @@ export function SelectionsPage() {
         setMsg(r.message || 'Imported!');
       }
     } catch (e: any) {
-      setMsg(`Error: ${e.message}`);
+      setMsg(friendlyError(e.message));
     }
     setBusy(null);
     get('/candidates?status=APPROVED&sort=score');
