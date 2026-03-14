@@ -360,7 +360,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
 
   // ── Gemini AI ──
   if (process.env.GEMINI_API_KEY) {
-    await testApi('Gemini 2.0 Flash', async () => {
+    await testApi('Gemini 2.5 Flash', async () => {
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
@@ -370,7 +370,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
       return { ok: true, detail: 'Connected & responding' };
     });
   } else {
-    results.push({ name: 'Gemini 2.0 Flash', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
+    results.push({ name: 'Gemini 2.5 Flash', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
   }
 
   // ── OpenAI ──
@@ -427,7 +427,8 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── Google Trends (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('Google Trends (RapidAPI)', async () => {
-      const r = await fetch('https://google-trends8.p.rapidapi.com/interestOverTime?keyword=gadget&geo=US&time=today+1-m', {
+      const params = new URLSearchParams({ keyword: 'gadget', property: '', geo: '', dataSource: 'web' });
+      const r = await fetch(`https://google-trends8.p.rapidapi.com/interestOverTime?${params}`, {
         headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
         signal: AbortSignal.timeout(8000),
       });
@@ -518,6 +519,54 @@ router.get('/api-health', async (_req: Request, res: Response) => {
 // ── API Monitoring ────────────────────────────
 router.get('/api-metrics', (_req: Request, res: Response) => {
   res.json(getApiMetrics());
+});
+
+// ── Debug: Raw AliExpress Response ────────────
+router.get('/debug/aliexpress', async (_req: Request, res: Response) => {
+  try {
+    const apiKey = process.env.RAPIDAPI_KEY;
+    if (!apiKey) return res.json({ error: 'RAPIDAPI_KEY not set' });
+
+    const r = await fetch('https://aliexpress-datahub.p.rapidapi.com/item_search_2?q=camping+tool&page=1&sort=default', {
+      headers: { 'X-Rapidapi-Key': apiKey, 'X-Rapidapi-Host': 'aliexpress-datahub.p.rapidapi.com' },
+    });
+    const data = await r.json();
+    const resultList = data?.result?.resultList || data?.resultList || [];
+    const first = resultList[0];
+    const item = first?.item || first;
+
+    res.json({
+      totalResults: resultList.length,
+      allKeys: item ? Object.keys(item) : [],
+      firstItem: item || 'No items found',
+      // Show first 3 items with all price-related fields
+      priceFields: resultList.slice(0, 3).map((entry: any) => {
+        const i = entry.item || entry;
+        return {
+          title: i.title?.slice(0, 50),
+          promotionPrice: i.promotionPrice,
+          salePrice: i.salePrice,
+          price: i.price,
+          originalPrice: i.originalPrice,
+          minPrice: i.minPrice,
+          min_price: i.min_price,
+          maxPrice: i.maxPrice,
+          productMinPrice: i.productMinPrice,
+          productMaxPrice: i.productMaxPrice,
+          tradePrice: i.tradePrice,
+          target_sale_price: i.target_sale_price,
+          app_sale_price: i.app_sale_price,
+          formattedPrice: i.formattedPrice,
+          priceStr: i.priceStr,
+          sku: i.sku,
+          prices: i.prices,
+          trade: i.trade,
+        };
+      }),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/api-timeline', (req: Request, res: Response) => {
