@@ -96,7 +96,9 @@ export async function searchAliExpressProducts(params: AESearchParams): Promise<
     let productUrl = item.itemUrl || item.productUrl || '';
     if (productUrl.startsWith('//')) productUrl = `https:${productUrl}`;
 
-    const suggestedPrice = price > 0 ? Math.round(price * 2.8 * 100) / 100 : 0;
+    // NOTE: API prices are promotional/wholesale — actual cost may be 1.5-2x higher
+    // We show the API price as cost but add a warning in the UI
+    const suggestedPrice = price > 0 ? Math.round(price * 2.2 * 100) / 100 : 0;
 
     products.push({
       providerType: 'ALIEXPRESS',

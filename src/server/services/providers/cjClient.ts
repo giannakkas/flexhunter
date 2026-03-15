@@ -107,7 +107,7 @@ export async function searchCJProducts(params: CJSearchParams): Promise<Normaliz
         imageUrls: [p.bigImage].filter(Boolean),
         variants: [],
         costPrice: parseFloat(p.sellPrice || p.nowPrice || '0'),
-        suggestedPrice: parseFloat(p.sellPrice || '0') * 2.5, // 2.5x markup
+        suggestedPrice: parseFloat(p.sellPrice || '0') * 2.2, // 2.2x markup
         currency: 'USD',
         shippingCost: 0,
         shippingDays: p.deliveryCycle ? parseInt(p.deliveryCycle) * 24 : 10,

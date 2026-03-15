@@ -316,8 +316,8 @@ export function CandidatesPage() {
                 {/* Pricing */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 4, background: '#FAFBFC', borderRadius: 10, padding: '10px 8px' }}>
                   {[
-                    { label: 'Price', val: `$${item.suggestedPrice?.toFixed(2)}` },
-                    { label: 'Cost', val: `$${item.costPrice?.toFixed(2)}` },
+                    { label: 'Sell For', val: `$${item.suggestedPrice?.toFixed(2)}` },
+                    { label: 'Est. Cost', val: `$${item.costPrice?.toFixed(2)}` },
                     { label: 'Profit', val: `$${p?.toFixed(2) || '-'}`, green: true },
                     { label: 'Margin', val: `${m?.toFixed(0) || '-'}%`, green: true },
                   ].map(c => (
@@ -327,6 +327,7 @@ export function CandidatesPage() {
                     </div>
                   ))}
                 </div>
+                <div style={{ fontSize: 10, color: '#8C9196', textAlign: 'center', marginTop: -4 }}>⚠️ Prices are estimates — verify on source before selling</div>
 
                 {/* Reviews + Shipping */}
                 <InlineStack gap="200" wrap>
@@ -387,7 +388,7 @@ export function CandidatesPage() {
         <IndexTable.Cell>
           <BlockStack gap="0">
             <Text as="span" variant="bodySm" fontWeight="semibold">${item.suggestedPrice?.toFixed(2)}</Text>
-            <Text as="span" variant="bodySm" tone="subdued">Cost ${item.costPrice?.toFixed(2)}</Text>
+            <Text as="span" variant="bodySm" tone="subdued">Est. Cost ${item.costPrice?.toFixed(2)}</Text>
           </BlockStack>
         </IndexTable.Cell>
         <IndexTable.Cell><Text as="span" tone="success" fontWeight="semibold">{m ? m.toFixed(0) + '%' : '-'}</Text></IndexTable.Cell>
@@ -434,7 +435,7 @@ export function CandidatesPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 16, textAlign: 'center' }}>
               {[
                 { label: 'Sell Price', val: `$${preview.suggestedPrice?.toFixed(2)}`, color: '#202223' },
-                { label: 'Cost', val: `$${preview.costPrice?.toFixed(2)}`, color: '#202223' },
+                { label: 'Est. Cost', val: `$${preview.costPrice?.toFixed(2)}`, color: '#202223' },
                 { label: 'Profit', val: `$${profit(preview)?.toFixed(2) || '-'}`, color: '#008060' },
                 { label: 'Margin', val: `${margin(preview)?.toFixed(0) || '-'}%`, color: '#008060' },
                 { label: 'Shipping', val: `${preview.shippingDays}d`, color: '#202223' },
@@ -446,6 +447,7 @@ export function CandidatesPage() {
               ))}
             </div>
           </div>
+          <div style={{ fontSize: 11, color: '#8C9196', textAlign: 'center', marginTop: -8 }}>⚠️ Prices are estimates from supplier API — always verify on source before setting your final price</div>
 
           <BlockStack gap="200">
             <Text as="h3" variant="headingSm">Description</Text>
