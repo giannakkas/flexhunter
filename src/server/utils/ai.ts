@@ -1,18 +1,17 @@
 // ==============================================
-// AI Engine — Google Gemini 2.5 Flash
+// AI Engine — Multi-Provider Chain
 // ==============================================
-// Uses gemini-2.5-flash-lite (fast, no thinking overhead)
-// with gemini-2.5-flash as fallback.
-// Falls back to OpenAI if GEMINI_API_KEY not set.
+// Priority: DeepSeek V3 → OpenAI GPT-4o → Claude Sonnet → Gemini (fallback)
+// Each provider is tried in order. First success wins.
+//
+// Env vars:
+//   DEEPSEEK_API_KEY  — primary (cheapest, great JSON)
+//   OPENAI_API_KEY    — backup (reliable)
+//   ANTHROPIC_API_KEY — 3rd backup (highest quality)
+//   GEMINI_API_KEY    — last resort (free)
 
-// Lite first (faster, cheaper, no thinking), then full flash
-const GEMINI_MODELS = [
-  'gemini-2.5-flash-lite',
-  'gemini-2.5-flash',
-];
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
+// ── API tracker ───────────────────────────────
 
-// External API tracker (lazy import to avoid circular deps)
 function trackApi(name: string, success: boolean, latency: number, error?: string) {
   try { const { trackExternalApi } = require('../middleware/apiMetrics'); trackExternalApi(name, success, latency, error); } catch {}
   if (!success && error) {
@@ -31,76 +30,72 @@ export interface AICompletionOptions {
   systemPrompt?: string;
 }
 
-/**
- * Call Gemini API via REST — tries multiple models
- */
-async function geminiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+// ── Parse JSON response ───────────────────────
 
-  const { temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
-  const start = Date.now();
-
-  const contents: any[] = [];
-  if (systemPrompt) {
-    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-    contents.push({ role: 'model', parts: [{ text: 'OK.' }] });
+function parseJsonResponse<T>(text: string): T {
+  const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    return cleaned as T;
   }
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
-
-  // Try each model until one works
-  for (const model of GEMINI_MODELS) {
-    try {
-      const res = await fetch(`${GEMINI_BASE}/${model}:generateContent?key=${apiKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents,
-          generationConfig: {
-            temperature,
-            maxOutputTokens: maxTokens,
-            responseMimeType: 'application/json',
-            // Disable thinking for flash models (causes issues with JSON mode)
-            ...(model.includes('2.5-flash') && !model.includes('lite') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const err = await res.text();
-        console.warn(`[AI] Gemini ${model} failed: ${res.status}`);
-        trackApi(`Gemini ${model}`, false, Date.now() - start, `${res.status}: ${err.slice(0, 60)}`);
-        continue; // Try next model
-      }
-
-      const data = await res.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      trackApi(`Gemini ${model}`, true, Date.now() - start);
-
-      try {
-        const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-        return JSON.parse(cleaned) as T;
-      } catch {
-        return text as T;
-      }
-    } catch (err: any) {
-      console.warn(`[AI] Gemini ${model} error: ${err.message?.slice(0, 60)}`);
-      trackApi(`Gemini ${model}`, false, Date.now() - start, err.message);
-    }
-  }
-
-  // All Gemini models failed
-  throw new Error('All Gemini models failed');
 }
 
-/**
- * OpenAI fallback
- */
+// ── Provider 1: DeepSeek V3 (PRIMARY) ─────────
+// OpenAI-compatible format, excellent JSON, cheapest
+
+async function deepseekComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
+  const apiKey = process.env.DEEPSEEK_API_KEY;
+  if (!apiKey) throw new Error('DEEPSEEK_API_KEY not set');
+
+  const { model = 'deepseek-chat', temperature = 0.3, maxTokens = 4096, systemPrompt } = options;
+  const start = Date.now();
+
+  const messages: any[] = [];
+  if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
+  messages.push({ role: 'user', content: prompt });
+
+  try {
+    const res = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        messages,
+        response_format: { type: 'json_object' },
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      trackApi('DeepSeek V3', false, Date.now() - start, `${res.status}: ${err.slice(0, 80)}`);
+      throw new Error(`DeepSeek error ${res.status}: ${err.slice(0, 150)}`);
+    }
+
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    trackApi('DeepSeek V3', true, Date.now() - start);
+    return parseJsonResponse<T>(content);
+  } catch (err: any) {
+    if (!err.message.includes('DeepSeek error')) {
+      trackApi('DeepSeek V3', false, Date.now() - start, err.message);
+    }
+    throw err;
+  }
+}
+
+// ── Provider 2: OpenAI GPT-4o (BACKUP) ────────
+
 async function openaiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error('No AI API key configured (set GEMINI_API_KEY or OPENAI_API_KEY)');
+  if (!apiKey) throw new Error('OPENAI_API_KEY not set');
 
-  const { model = 'gpt-4o-mini', temperature = 0.4, maxTokens = 4096, systemPrompt } = options;
+  const { model = 'gpt-4o', temperature = 0.3, maxTokens = 4096, systemPrompt } = options;
   const start = Date.now();
 
   const messages: any[] = [];
@@ -114,63 +109,171 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model, temperature, max_tokens: maxTokens, messages }),
+      body: JSON.stringify({
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        messages,
+        response_format: { type: 'json_object' },
+      }),
     });
 
     if (!res.ok) {
       const err = await res.text();
-      trackApi('OpenAI', false, Date.now() - start, `${res.status}`);
-      throw new Error(`OpenAI API error ${res.status}: ${err.slice(0, 200)}`);
+      trackApi('OpenAI GPT-4o', false, Date.now() - start, `${res.status}`);
+      throw new Error(`OpenAI error ${res.status}: ${err.slice(0, 150)}`);
     }
 
     const data = await res.json();
     const content = data.choices?.[0]?.message?.content || '';
-    trackApi('OpenAI', true, Date.now() - start);
-
-    try {
-      const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      return JSON.parse(cleaned) as T;
-    } catch {
-      return content as T;
-    }
+    trackApi('OpenAI GPT-4o', true, Date.now() - start);
+    return parseJsonResponse<T>(content);
   } catch (err: any) {
-    if (!err.message.includes('OpenAI API error')) {
-      trackApi('OpenAI', false, Date.now() - start, err.message);
+    if (!err.message.includes('OpenAI error')) {
+      trackApi('OpenAI GPT-4o', false, Date.now() - start, err.message);
     }
     throw err;
   }
 }
 
-/**
- * Main AI completion — uses Gemini if available, falls back to OpenAI on failure
- */
+// ── Provider 3: Claude Sonnet (3RD BACKUP) ────
+
+async function claudeComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error('ANTHROPIC_API_KEY not set');
+
+  const { model = 'claude-sonnet-4-20250514', temperature = 0.3, maxTokens = 4096, systemPrompt } = options;
+  const start = Date.now();
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        ...(systemPrompt ? { system: systemPrompt } : {}),
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      trackApi('Claude Sonnet', false, Date.now() - start, `${res.status}: ${err.slice(0, 80)}`);
+      throw new Error(`Claude error ${res.status}: ${err.slice(0, 150)}`);
+    }
+
+    const data = await res.json();
+    const content = data.content?.[0]?.text || '';
+    trackApi('Claude Sonnet', true, Date.now() - start);
+    return parseJsonResponse<T>(content);
+  } catch (err: any) {
+    if (!err.message.includes('Claude error')) {
+      trackApi('Claude Sonnet', false, Date.now() - start, err.message);
+    }
+    throw err;
+  }
+}
+
+// ── Provider 4: Gemini Flash (LAST RESORT) ────
+
+async function geminiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY not set');
+
+  const { temperature = 0.3, maxTokens = 4096, systemPrompt } = options;
+  const start = Date.now();
+
+  const contents: any[] = [];
+  if (systemPrompt) {
+    contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+    contents.push({ role: 'model', parts: [{ text: 'OK.' }] });
+  }
+  contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+  const models = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+  for (const model of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents,
+          generationConfig: {
+            temperature,
+            maxOutputTokens: maxTokens,
+            responseMimeType: 'application/json',
+            ...(model === 'gemini-2.5-flash' ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        trackApi(`Gemini ${model}`, false, Date.now() - start, `${res.status}`);
+        continue;
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      trackApi(`Gemini ${model}`, true, Date.now() - start);
+      return parseJsonResponse<T>(text);
+    } catch (err: any) {
+      trackApi(`Gemini ${model}`, false, Date.now() - start, err.message);
+    }
+  }
+  throw new Error('All Gemini models failed');
+}
+
+// ══════════════════════════════════════════════
+// Main AI Completion — Cascade Chain
+// DeepSeek V3 → OpenAI GPT-4o → Claude Sonnet → Gemini
+// ══════════════════════════════════════════════
+
 export async function aiComplete<T = string>(
   prompt: string,
   options: AICompletionOptions = {}
 ): Promise<T> {
-  // Try Gemini first
-  if (process.env.GEMINI_API_KEY) {
+  const providers: { name: string; key: string | undefined; fn: () => Promise<T> }[] = [
+    { name: 'DeepSeek', key: process.env.DEEPSEEK_API_KEY, fn: () => deepseekComplete<T>(prompt, options) },
+    { name: 'OpenAI',   key: process.env.OPENAI_API_KEY,   fn: () => openaiComplete<T>(prompt, options) },
+    { name: 'Claude',   key: process.env.ANTHROPIC_API_KEY, fn: () => claudeComplete<T>(prompt, options) },
+    { name: 'Gemini',   key: process.env.GEMINI_API_KEY,    fn: () => geminiComplete<T>(prompt, options) },
+  ];
+
+  const errors: string[] = [];
+
+  for (const provider of providers) {
+    if (!provider.key) continue;
     try {
-      return await geminiComplete<T>(prompt, options);
+      return await provider.fn();
     } catch (err: any) {
-      // If Gemini fails (429, 500, etc.) and OpenAI is available, fall back
-      if (process.env.OPENAI_API_KEY) {
-        console.warn(`[AI] Gemini failed (${err.message?.slice(0, 60)}), falling back to OpenAI`);
-        return openaiComplete<T>(prompt, options);
-      }
-      throw err; // No fallback available
+      const msg = err.message?.slice(0, 80) || 'unknown';
+      console.warn(`[AI] ${provider.name} failed: ${msg}`);
+      errors.push(`${provider.name}: ${msg}`);
     }
   }
-  // No Gemini key — use OpenAI directly
-  if (process.env.OPENAI_API_KEY) {
-    return openaiComplete<T>(prompt, options);
-  }
-  throw new Error('No AI API key configured (set GEMINI_API_KEY or OPENAI_API_KEY)');
+
+  throw new Error(`All AI providers failed: ${errors.join(' | ')}`);
 }
 
-/**
- * AI-powered product analysis for scoring enrichment
- */
+// ── Helper: Get active AI provider info ───────
+
+export function getAIProviderInfo(): { primary: string; available: string[]; count: number } {
+  const available: string[] = [];
+  if (process.env.DEEPSEEK_API_KEY) available.push('DeepSeek V3');
+  if (process.env.OPENAI_API_KEY) available.push('OpenAI GPT-4o');
+  if (process.env.ANTHROPIC_API_KEY) available.push('Claude Sonnet');
+  if (process.env.GEMINI_API_KEY) available.push('Gemini Flash');
+  return { primary: available[0] || 'none', available, count: available.length };
+}
+
+// ── Product Analysis Helpers ──────────────────
+
 export async function aiAnalyzeProductFit(
   product: { title: string; description: string; category: string },
   storeContext: {

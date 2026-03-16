@@ -362,24 +362,25 @@ router.get('/api-health', async (_req: Request, res: Response) => {
     }
   }
 
-  // ── Gemini AI ──
-  if (process.env.GEMINI_API_KEY) {
-    await testApi('Gemini AI', async () => {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
-        signal: AbortSignal.timeout(8000),
+  // ── DeepSeek V3 (PRIMARY) ──
+  if (process.env.DEEPSEEK_API_KEY) {
+    await testApi('DeepSeek V3 (PRIMARY)', async () => {
+      const r = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'Reply: OK' }], max_tokens: 5 }),
+        signal: AbortSignal.timeout(10000),
       });
       if (!r.ok) { const t = await r.text(); return { ok: false, detail: `HTTP ${r.status}: ${t.slice(0, 100)}` }; }
-      return { ok: true, detail: 'Connected & responding' };
+      return { ok: true, detail: 'Connected & responding — DeepSeek V3' };
     });
   } else {
-    results.push({ name: 'Gemini AI', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
+    results.push({ name: 'DeepSeek V3 (PRIMARY)', status: 'not_configured', latency: 0, detail: 'DEEPSEEK_API_KEY not set — add it for best results', configured: false });
   }
 
-  // ── OpenAI ──
+  // ── OpenAI GPT-4o (BACKUP) ──
   if (process.env.OPENAI_API_KEY) {
-    await testApi('OpenAI GPT', async () => {
+    await testApi('OpenAI GPT-4o (BACKUP)', async () => {
       const r = await fetch('https://api.openai.com/v1/models', {
         headers: { 'Authorization': `Bearer ${process.env.OPENAI_API_KEY}` },
         signal: AbortSignal.timeout(8000),
@@ -388,7 +389,38 @@ router.get('/api-health', async (_req: Request, res: Response) => {
       return { ok: true, detail: 'Key valid & connected' };
     });
   } else {
-    results.push({ name: 'OpenAI GPT', status: 'not_configured', latency: 0, detail: 'OPENAI_API_KEY not set (optional — Gemini is primary)', configured: false });
+    results.push({ name: 'OpenAI GPT-4o (BACKUP)', status: 'not_configured', latency: 0, detail: 'OPENAI_API_KEY not set', configured: false });
+  }
+
+  // ── Claude Sonnet (3RD BACKUP) ──
+  if (process.env.ANTHROPIC_API_KEY) {
+    await testApi('Claude Sonnet (3RD)', async () => {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY!, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 10, messages: [{ role: 'user', content: 'Reply: OK' }] }),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!r.ok) { const t = await r.text(); return { ok: false, detail: `HTTP ${r.status}: ${t.slice(0, 100)}` }; }
+      return { ok: true, detail: 'Connected — Claude Sonnet 4' };
+    });
+  } else {
+    results.push({ name: 'Claude Sonnet (3RD)', status: 'not_configured', latency: 0, detail: 'ANTHROPIC_API_KEY not set', configured: false });
+  }
+
+  // ── Gemini Flash (LAST RESORT) ──
+  if (process.env.GEMINI_API_KEY) {
+    await testApi('Gemini Flash (FALLBACK)', async () => {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!r.ok) { const t = await r.text(); return { ok: false, detail: `HTTP ${r.status}: ${t.slice(0, 100)}` }; }
+      return { ok: true, detail: 'Connected — Gemini 2.5 Flash Lite' };
+    });
+  } else {
+    results.push({ name: 'Gemini Flash (FALLBACK)', status: 'not_configured', latency: 0, detail: 'GEMINI_API_KEY not set', configured: false });
   }
 
   // ── AliExpress (RapidAPI) ──

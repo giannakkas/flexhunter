@@ -74,7 +74,7 @@ app.get('/health', async (_req, res) => {
     timestamp: new Date().toISOString(),
     uptime: Math.round(process.uptime()),
     cache: cache.isRedisAvailable() ? 'redis' : 'memory',
-    ai: process.env.GEMINI_API_KEY ? 'gemini' : process.env.OPENAI_API_KEY ? 'openai' : 'none',
+    ai: process.env.DEEPSEEK_API_KEY ? 'deepseek' : process.env.OPENAI_API_KEY ? 'openai' : process.env.ANTHROPIC_API_KEY ? 'claude' : process.env.GEMINI_API_KEY ? 'gemini' : 'none',
     providers: {
       aliexpress: !!process.env.RAPIDAPI_KEY,
       cj: !!process.env.CJ_API_KEY,
@@ -160,7 +160,7 @@ app.listen(config.port, async () => {
   logger.info('FlexHunter server started', {
     port: config.port,
     env: config.nodeEnv,
-    ai: process.env.GEMINI_API_KEY ? 'Gemini 2.0 Flash' : process.env.OPENAI_API_KEY ? 'OpenAI' : 'none',
+    ai: process.env.DEEPSEEK_API_KEY ? 'DeepSeek V3' : process.env.OPENAI_API_KEY ? 'OpenAI GPT-4o' : process.env.ANTHROPIC_API_KEY ? 'Claude Sonnet' : process.env.GEMINI_API_KEY ? 'Gemini Flash' : 'none',
     cache: cache.isRedisAvailable() ? 'Redis' : 'in-memory',
     providers: [
       process.env.RAPIDAPI_KEY ? 'AliExpress' : null,
@@ -174,7 +174,7 @@ app.listen(config.port, async () => {
 ║──────────────────────────────────────────║
 ║  Port:     ${config.port}                          ║
 ║  Env:      ${config.nodeEnv.padEnd(28)}║
-║  AI:       ${(process.env.GEMINI_API_KEY ? 'Gemini 2.0 Flash' : 'OpenAI/None').padEnd(28)}║
+║  AI:       ${(process.env.DEEPSEEK_API_KEY ? 'DeepSeek V3 (primary)' : process.env.OPENAI_API_KEY ? 'OpenAI GPT-4o' : 'No AI key!').padEnd(28)}║
 ║  Cache:    ${(cache.isRedisAvailable() ? 'Redis' : 'In-Memory').padEnd(28)}║
 ║  Shopify:  ${config.shopify.appUrl ? '✓ configured' : '✗ missing'}                    ║
 ║  Admin:    ${process.env.ADMIN_SECRET ? '✓ protected' : '✗ no ADMIN_SECRET'}                    ║
