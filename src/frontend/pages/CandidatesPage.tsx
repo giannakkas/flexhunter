@@ -159,163 +159,94 @@ export function CandidatesPage() {
   const [researchRunning, setResearchRunning] = useState(false);
   const [researchProgress, setResearchProgress] = useState(0);
   const [researchStage, setResearchStage] = useState('');
+  const pollingActive = React.useRef(false);
 
   useEffect(() => { get('/candidates?status=CANDIDATE&sort=score'); }, [get]);
 
-  // Auto-detect if research is already running (e.g., user navigated away and came back)
+  // Single polling function — prevents duplicates via ref
+  const startPolling = (fromProgress: number) => {
+    if (pollingActive.current) return;
+    pollingActive.current = true;
+    setResearchRunning(true);
+
+    let prog = fromProgress;
+    let tick = 0;
+    const msgs = [
+      '🔬 AI is scoring products...',
+      '⏳ DeepSeek analyzing your niche...',
+      '📊 Ranking by fit, profit & trend...',
+      '💾 Saving winning products...',
+      '🎯 Finalizing scores...',
+    ];
+
+    const timer = setInterval(() => {
+      tick++;
+      if (prog < 95) prog = Math.min(95, prog + Math.random() * 0.5 + 0.1);
+      setResearchProgress(prog);
+      setResearchStage(msgs[Math.floor(tick / 6) % msgs.length]);
+    }, 1000);
+
+    const stopPolling = (loadProducts: boolean) => {
+      clearInterval(timer);
+      pollingActive.current = false;
+      if (loadProducts) get('/candidates?status=CANDIDATE&sort=score');
+    };
+
+    (async () => {
+      for (let i = 0; i < 200; i++) {
+        await new Promise(r => setTimeout(r, 3000));
+        if (!pollingActive.current) return;
+        try {
+          const s = await apiFetch<any>('/research/status');
+          const j = s?.data;
+          if (!j) continue;
+          if (j.status === 'COMPLETED') {
+            setResearchProgress(100);
+            setResearchStage(`✅ Found ${(j.result as any)?.totalSaved || 0} products!`);
+            stopPolling(true);
+            setTimeout(() => setResearchRunning(false), 2000);
+            return;
+          }
+          if (j.status === 'FAILED') {
+            stopPolling(true);
+            setResearchRunning(false);
+            setMsg(friendlyError(j.error || 'Research failed'));
+            return;
+          }
+          if (i % 10 === 0) get('/candidates?status=CANDIDATE&sort=score');
+        } catch {}
+      }
+      stopPolling(true);
+      setResearchRunning(false);
+      setMsg('Research timed out. Products found so far are shown.');
+    })();
+  };
+
+  // On mount: detect running research
   useEffect(() => {
-    let cancelled = false;
     (async () => {
       try {
-        const status = await apiFetch<any>('/research/status');
-        const job = status?.data;
-        if (!job || job.status !== 'RUNNING' || cancelled) return;
-        
-        // Research is running — resume progress UI
-        setResearchRunning(true);
-        setResearchProgress(50);
-        setResearchStage('⏳ Research in progress — resuming...');
-
-        // Start polling
-        for (let i = 0; i < 160; i++) {
-          if (cancelled) return;
-          await new Promise(r => setTimeout(r, 3000));
-          try {
-            const s = await apiFetch<any>('/research/status');
-            const j = s?.data;
-            if (!j) continue;
-
-            // Update stage message
-            const msgs = [
-              '🔬 AI is scoring products...',
-              '⏳ DeepSeek analyzing your niche...',
-              '📊 Ranking by fit, profit & trend...',
-              '💾 Saving winning products...',
-            ];
-            setResearchStage(msgs[i % msgs.length]);
-            setResearchProgress(Math.min(95, 50 + i * 0.5));
-
-            if (j.status === 'COMPLETED') {
-              setResearchProgress(100);
-              const saved = (j.result as any)?.totalSaved || 0;
-              setResearchStage(`✅ Research complete! Found ${saved} products.`);
-              await get('/candidates?status=CANDIDATE&sort=score');
-              setTimeout(() => { if (!cancelled) setResearchRunning(false); }, 2000);
-              return;
-            }
-            if (j.status === 'FAILED') {
-              setResearchRunning(false);
-              await get('/candidates?status=CANDIDATE&sort=score');
-              return;
-            }
-            // Periodically load products
-            if (i % 10 === 0) await get('/candidates?status=CANDIDATE&sort=score');
-          } catch {}
-        }
-        if (!cancelled) { setResearchRunning(false); await get('/candidates?status=CANDIDATE&sort=score'); }
+        const s = await apiFetch<any>('/research/status');
+        if (s?.data?.status === 'RUNNING') startPolling(50);
       } catch {}
     })();
-    return () => { cancelled = true; };
+    return () => { pollingActive.current = false; };
   }, []); // eslint-disable-line
 
   const handleResearch = async () => {
-    setResearchRunning(true);
-    setResearchProgress(1);
-    setResearchStage('🔑 Starting AI Research Engine...');
+    // Stop any existing polling
+    pollingActive.current = false;
     setData([]);
+    setResearchRunning(true);
+    setResearchProgress(2);
+    setResearchStage('🔑 Starting AI Research...');
 
-    const stages = [
-      { at: 2, text: '🗑️ Clearing old results...' },
-      { at: 5, text: '🧬 Step 1/6 — Building store DNA profile...' },
-      { at: 12, text: '🔑 Step 2/6 — AI generating niche keywords...' },
-      { at: 20, text: '🌐 Step 3/6 — Searching AliExpress & CJ Dropshipping...' },
-      { at: 35, text: '📦 Step 3/6 — Fetching products from suppliers...' },
-      { at: 45, text: '🤖 Step 4/6 — AI filtering relevant products...' },
-      { at: 55, text: '🎯 Step 5/6 — DeepSeek V3 scoring products...' },
-      { at: 65, text: '💰 Step 5/6 — Analyzing margins & trends...' },
-      { at: 75, text: '📈 Step 5/6 — Viral prediction engine running...' },
-      { at: 85, text: '💾 Step 6/6 — Saving winning products...' },
-      { at: 95, text: '✅ Almost done...' },
-    ];
-
-    // Start progress timer IMMEDIATELY (don't wait for API calls)
-    let prog = 1;
-    let tickCount = 0;
-    const interval = setInterval(() => {
-      tickCount++;
-      if (prog < 95) {
-        prog += Math.random() * 0.8 + 0.2;
-        if (prog > 95) prog = 95;
-      }
-      setResearchProgress(prog);
-      const stage = [...stages].reverse().find(s => prog >= s.at);
-      if (stage && prog < 95) setResearchStage(stage.text);
-      
-      // After 95%, show time-based messages so user knows it's not stuck
-      if (prog >= 95) {
-        const messages = [
-          '✅ Almost done — AI is finalizing scores...',
-          '⏳ DeepSeek is analyzing products — this takes 2-4 minutes...',
-          '🔬 Still working — scoring products against your store DNA...',
-          '📊 Ranking products by fit, profit, and viral potential...',
-          '💾 Writing results to database...',
-        ];
-        setResearchStage(messages[Math.floor(tickCount / 8) % messages.length]);
-      }
-    }, 1000);
-
-    // Clear old candidates (fire and forget — don't block)
     apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
 
-    setResearchStage('🔑 Starting AI Research Engine...');
-
     try {
-      // Start research — returns immediately
       await apiFetch<any>('/research/start', { method: 'POST' });
-
-      // Poll for completion every 3 seconds (max 8 minutes)
-      const pollForResults = async () => {
-        for (let i = 0; i < 160; i++) { // max 8 minutes
-          await new Promise(r => setTimeout(r, 3000));
-          try {
-            const status = await apiFetch<any>('/research/status');
-            const job = status.data;
-            if (!job) continue;
-
-            if (job.status === 'COMPLETED') {
-              clearInterval(interval);
-              setResearchProgress(100);
-              const saved = (job.result as any)?.totalSaved || 0;
-              setResearchStage(`✅ Research complete! Found ${saved} winning products.`);
-              await get('/candidates?status=CANDIDATE&sort=score');
-              setTimeout(() => { setResearchRunning(false); }, 2000);
-              return;
-            }
-            if (job.status === 'FAILED') {
-              clearInterval(interval);
-              setResearchRunning(false);
-              // Still try to load any products that were saved before failure
-              await get('/candidates?status=CANDIDATE&sort=score');
-              setMsg(friendlyError(job.error || 'Research failed — some products may still have been found'));
-              return;
-            }
-            
-            // Still running — periodically check if products were saved already
-            if (i > 0 && i % 10 === 0) {
-              await get('/candidates?status=CANDIDATE&sort=score');
-            }
-          } catch {}
-        }
-        // Timeout — load whatever was saved
-        clearInterval(interval);
-        setResearchRunning(false);
-        await get('/candidates?status=CANDIDATE&sort=score');
-        setMsg('Research is taking longer than expected. Products found so far are shown below.');
-      };
-
-      pollForResults();
+      startPolling(5);
     } catch (err: any) {
-      clearInterval(interval);
       setResearchRunning(false);
       setMsg(friendlyError(err.message));
     }
