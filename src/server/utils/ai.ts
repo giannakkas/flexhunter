@@ -1,19 +1,20 @@
 // ==============================================
 // AI Engine — Google Gemini 2.5 Flash
 // ==============================================
-// Fast, accurate, cost-effective for product analysis.
+// Uses gemini-2.5-flash-lite (fast, no thinking overhead)
+// with gemini-2.5-flash as fallback.
 // Falls back to OpenAI if GEMINI_API_KEY not set.
 
+// Lite first (faster, cheaper, no thinking), then full flash
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
 ];
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 // External API tracker (lazy import to avoid circular deps)
 function trackApi(name: string, success: boolean, latency: number, error?: string) {
   try { const { trackExternalApi } = require('../middleware/apiMetrics'); trackExternalApi(name, success, latency, error); } catch {}
-  // Alert admin on failures
   if (!success && error) {
     try {
       const status = error.match(/(\d{3})/)?.[1];
@@ -31,7 +32,7 @@ export interface AICompletionOptions {
 }
 
 /**
- * Call Gemini 2.0 Flash API directly via REST
+ * Call Gemini API via REST — tries multiple models
  */
 async function geminiComplete<T = string>(prompt: string, options: AICompletionOptions = {}): Promise<T> {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -43,7 +44,7 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
   const contents: any[] = [];
   if (systemPrompt) {
     contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-    contents.push({ role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] });
+    contents.push({ role: 'model', parts: [{ text: 'OK.' }] });
   }
   contents.push({ role: 'user', parts: [{ text: prompt }] });
 
@@ -59,6 +60,8 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
             temperature,
             maxOutputTokens: maxTokens,
             responseMimeType: 'application/json',
+            // Disable thinking for flash models (causes issues with JSON mode)
+            ...(model.includes('2.5-flash') && !model.includes('lite') ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
           },
         }),
       });
