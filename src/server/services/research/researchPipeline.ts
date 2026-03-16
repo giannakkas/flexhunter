@@ -168,26 +168,34 @@ async function deepScore(
   maxResults: number,
   shopId: string,
 ): Promise<(NormalizedProduct & { agentScore: MultiAgentScore })[]> {
-  const results: (NormalizedProduct & { agentScore: MultiAgentScore })[] = [];
+  const allScored: (NormalizedProduct & { agentScore: MultiAgentScore })[] = [];
 
-  // Get shop-specific weights (learned from outcomes if enough data)
+  // Get shop-specific weights
   const weights = await getWeights(shopId);
   const defaultW = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
   const isLearned = JSON.stringify(weights) !== JSON.stringify(defaultW);
   if (isLearned) console.log(`[Research] Using learned weights for shop ${shopId}`);
 
-  // BATCH SCORING: 1 AI call per 5 products (was 3 calls per 1 product)
   const batchSize = 5;
   let aiCallCount = 0;
+  let nullCount = 0;
+  let avoidCount = 0;
 
-  for (let i = 0; i < products.length && results.length < maxResults; i += batchSize) {
+  for (let i = 0; i < products.length; i += batchSize) {
     const batch = products.slice(i, i + batchSize);
-    const scores = await runBatchMultiAgentScoring(batch, dna, settings);
-    aiCallCount++;
+    let scores: (MultiAgentScore | null)[];
+    
+    try {
+      scores = await runBatchMultiAgentScoring(batch, dna, settings);
+      aiCallCount++;
+    } catch (err: any) {
+      console.error(`[Research] Batch scoring FAILED: ${err.message}`);
+      scores = batch.map(() => null);
+    }
 
     for (let j = 0; j < batch.length; j++) {
       const score = scores[j];
-      if (!score) continue;
+      if (!score) { nullCount++; continue; }
 
       // Recalculate with learned weights
       if (isLearned) {
@@ -201,19 +209,30 @@ async function deepScore(
         );
       }
 
-      if (score.recommendation === 'avoid') continue;
+      if (score.recommendation === 'avoid') avoidCount++;
 
-      // Store signals in feature store
-      const signals = buildSignals(batch[j].providerProductId, shopId, score, batch[j]);
-      storeSignals(signals).catch(() => {});
+      // Store signals
+      try { const signals = buildSignals(batch[j].providerProductId, shopId, score, batch[j]); storeSignals(signals).catch(() => {}); } catch {}
 
-      results.push({ ...batch[j], agentScore: score });
+      allScored.push({ ...batch[j], agentScore: score });
     }
   }
 
-  console.log(`[Research] Batch scored ${products.length} products in ${aiCallCount} AI calls`);
-  results.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
-  return results.slice(0, maxResults);
+  console.log(`[Research] Scoring: ${products.length} products → ${allScored.length} scored, ${nullCount} null, ${avoidCount} avoid, ${aiCallCount} AI calls`);
+
+  // Sort by score
+  allScored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
+
+  // Filter out "avoid" — but NEVER return 0 results if we have scored products
+  const good = allScored.filter(p => p.agentScore.recommendation !== 'avoid');
+  
+  if (good.length >= 3) {
+    return good.slice(0, maxResults);
+  }
+  
+  // If too few passed, return top scored regardless of recommendation
+  console.warn(`[Research] Only ${good.length} non-avoid products — returning top ${Math.min(allScored.length, maxResults)} by score`);
+  return allScored.slice(0, maxResults);
 }
 
 // ── Main Pipeline ────────────────────────────────
@@ -301,7 +320,46 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
 
   // Step 5: Multi-Agent Deep Scoring
   console.log(`[Research] Step 5/6: Running BATCH AI scoring (1 call per 5 products)...`);
-  const scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
+  let scored: (NormalizedProduct & { agentScore: MultiAgentScore })[] = [];
+  
+  try {
+    scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
+  } catch (err: any) {
+    console.error(`[Research] ❌ SCORING CRASHED: ${err.message}`);
+    console.error(err.stack?.slice(0, 300));
+  }
+
+  // ABSOLUTE FALLBACK: if scoring produced nothing, create basic scores algorithmically
+  if (scored.length === 0 && relevant.length > 0) {
+    console.warn(`[Research] ⚠️ AI scoring returned 0 — using ALGORITHMIC FALLBACK for ${relevant.length} products`);
+    const { supplierQualityAgent, profitAgent, trendAgent } = await import('../agents');
+    
+    for (const p of relevant.slice(0, maxCandidates)) {
+      try {
+        const profit = await profitAgent(p);
+        const trend = await trendAgent(p);
+        const supplier = supplierQualityAgent(p);
+        const finalScore = Math.round(profit.score * 0.30 + trend.score * 0.30 + supplier.score * 0.20 + 50 * 0.20);
+        
+        scored.push({
+          ...p,
+          agentScore: {
+            storeFit: { score: 50, confidence: 0.2, reasoning: 'AI unavailable — default', signals: [] },
+            profitability: profit,
+            trendPotential: trend,
+            viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ AI unavailable — algorithmic score only'], explanation: 'No AI data' },
+            saturation: { score: 50, confidence: 0.2, reasoning: 'AI unavailable — default', signals: [] },
+            supplierQuality: supplier,
+            finalScore,
+            recommendation: finalScore >= 60 ? 'maybe' : 'skip',
+            explanation: `Algorithmic fallback — AI unavailable. Profit: ${profit.reasoning}. Trend: ${trend.reasoning}. [AI scoring failed — results may be less accurate]`,
+          },
+        });
+      } catch {}
+    }
+    scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
+  }
+
   console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
 
   // Step 6: Save results
