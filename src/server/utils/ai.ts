@@ -35,8 +35,22 @@ export interface AICompletionOptions {
 function parseJsonResponse<T>(text: string): T {
   const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   try {
-    return JSON.parse(cleaned) as T;
+    const parsed = JSON.parse(cleaned);
+    // If we got an object with a single array property, unwrap it
+    // This handles DeepSeek/OpenAI wrapping arrays: {"results": [...]} or {"products": [...]}
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const keys = Object.keys(parsed);
+      if (keys.length === 1 && Array.isArray(parsed[keys[0]])) {
+        return parsed[keys[0]] as T;
+      }
+    }
+    return parsed as T;
   } catch {
+    // Try to extract JSON from mixed text
+    const jsonMatch = cleaned.match(/[\[\{][\s\S]*[\]\}]/);
+    if (jsonMatch) {
+      try { return JSON.parse(jsonMatch[0]) as T; } catch {}
+    }
     return cleaned as T;
   }
 }
@@ -67,7 +81,6 @@ async function deepseekComplete<T = string>(prompt: string, options: AICompletio
         temperature,
         max_tokens: maxTokens,
         messages,
-        response_format: { type: 'json_object' },
       }),
     });
 
@@ -114,7 +127,6 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
         temperature,
         max_tokens: maxTokens,
         messages,
-        response_format: { type: 'json_object' },
       }),
     });
 
