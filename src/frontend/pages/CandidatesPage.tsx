@@ -222,12 +222,17 @@ export function CandidatesPage() {
     })();
   };
 
-  // On mount: detect running research
+  // On mount: detect running research (only if job is recent — last 5 min)
   useEffect(() => {
     (async () => {
       try {
         const s = await apiFetch<any>('/research/status');
-        if (s?.data?.status === 'RUNNING') startPolling(50);
+        const job = s?.data;
+        if (job?.status === 'RUNNING') {
+          const created = new Date(job.createdAt).getTime();
+          const fiveMinAgo = Date.now() - 5 * 60 * 1000;
+          if (created > fiveMinAgo) startPolling(50);
+        }
       } catch {}
     })();
     return () => { pollingActive.current = false; };
