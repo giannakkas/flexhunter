@@ -41,8 +41,8 @@ app.use(logger.requestLogger());
 // API metrics collection
 app.use('/api', apiMetricsMiddleware());
 
-// Security: request timeout (90s for research, 30s for everything else)
-app.use('/api/research', requestTimeout(180_000));
+// Security: request timeout (5min for research, 30s for everything else)
+app.use('/api/research', requestTimeout(300_000));
 app.use('/api', requestTimeout(30_000));
 
 // Security: input sanitization

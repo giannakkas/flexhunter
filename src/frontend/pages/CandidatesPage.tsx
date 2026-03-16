@@ -165,48 +165,44 @@ export function CandidatesPage() {
   const handleResearch = async () => {
     setResearchRunning(true);
     setResearchProgress(0);
-    setResearchStage('🗑️ Clearing old results...');
-
-    // Clear frontend state immediately
     setData([]);
 
-    // Clear old candidates in DB
-    await apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
-
-    setResearchStage('Initializing Multi-Agent AI Engine...');
-
     const stages = [
-      { at: 3, text: '🧬 Step 1/6 — Building store DNA profile...' },
-      { at: 10, text: '🔑 Step 2/6 — AI generating 15 niche-specific keywords...' },
-      { at: 18, text: '🌐 Step 3/6 — Searching AliExpress & CJ Dropshipping...' },
-      { at: 28, text: '📦 Step 3/6 — Fetching products across all suppliers...' },
-      { at: 38, text: '🤖 Step 4/6 — AI Relevance Agent filtering products...' },
-      { at: 48, text: '🎯 Step 5/6 — Store Fit Agent analyzing each product...' },
-      { at: 55, text: '💰 Step 5/6 — Profit Agent calculating margins...' },
-      { at: 62, text: '📈 Step 5/6 — Trend Agent evaluating demand signals...' },
-      { at: 70, text: '🔍 Step 5/6 — Saturation Agent checking competition...' },
-      { at: 78, text: '🚚 Step 5/6 — Supplier Quality Agent scoring delivery...' },
-      { at: 85, text: '⚖️ Step 5/6 — Scoring Agent combining all signals...' },
-      { at: 92, text: '💾 Step 6/6 — Saving winning products...' },
-      { at: 97, text: '✅ Finalizing results...' },
+      { at: 2, text: '🗑️ Clearing old results...' },
+      { at: 5, text: '🧬 Step 1/6 — Building store DNA profile...' },
+      { at: 12, text: '🔑 Step 2/6 — AI generating niche keywords...' },
+      { at: 20, text: '🌐 Step 3/6 — Searching AliExpress & CJ Dropshipping...' },
+      { at: 35, text: '📦 Step 3/6 — Fetching products from suppliers...' },
+      { at: 45, text: '🤖 Step 4/6 — AI filtering relevant products...' },
+      { at: 55, text: '🎯 Step 5/6 — DeepSeek V3 scoring products...' },
+      { at: 65, text: '💰 Step 5/6 — Analyzing margins & trends...' },
+      { at: 75, text: '📈 Step 5/6 — Viral prediction engine running...' },
+      { at: 85, text: '💾 Step 6/6 — Saving winning products...' },
+      { at: 95, text: '✅ Almost done...' },
     ];
 
-    let prog = 0;
+    // Start progress timer IMMEDIATELY (don't wait for API calls)
+    let prog = 1;
     const interval = setInterval(() => {
-      prog += Math.random() * 1.8 + 0.4;
-      if (prog > 97) prog = 97;
+      prog += Math.random() * 0.8 + 0.2; // Slower increment for 5-min research
+      if (prog > 95) prog = 95;
       setResearchProgress(prog);
       const stage = [...stages].reverse().find(s => prog >= s.at);
       if (stage) setResearchStage(stage.text);
-    }, 500);
+    }, 1000);
+
+    // Clear old candidates (fire and forget — don't block)
+    apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
+
+    setResearchStage('🔑 Starting AI Research Engine...');
 
     try {
       // Start research — returns immediately
       await apiFetch<any>('/research/start', { method: 'POST' });
 
-      // Poll for completion every 3 seconds
+      // Poll for completion every 3 seconds (max 8 minutes)
       const pollForResults = async () => {
-        for (let i = 0; i < 60; i++) { // max 3 minutes
+        for (let i = 0; i < 160; i++) { // max 8 minutes
           await new Promise(r => setTimeout(r, 3000));
           try {
             const status = await apiFetch<any>('/research/status');
@@ -231,7 +227,7 @@ export function CandidatesPage() {
             // Still running — continue polling
           } catch {}
         }
-        // Timeout after 3 min of polling
+        // Timeout after 8 min of polling
         clearInterval(interval);
         setResearchRunning(false);
         // Try loading whatever was saved
