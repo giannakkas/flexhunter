@@ -379,6 +379,78 @@ router.post('/domain/analyze', async (req: Request, res: Response) => {
 
 // ── Research ───────────────────────────────────
 
+// Research diagnostic — tests each step and returns results
+router.post('/research/diagnose', async (req: Request, res: Response) => {
+  const diag: any = { steps: [], errors: [] };
+  try {
+    const shopId = await getOrCreateShop(req);
+    diag.shopId = shopId;
+
+    // Step 1: Check settings
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    diag.steps.push({ step: 'settings', ok: !!settings?.storeDescription, description: settings?.storeDescription?.slice(0, 50) });
+    if (!settings?.storeDescription) { return res.json({ success: true, data: diag }); }
+
+    // Step 2: Test AI
+    try {
+      const { aiComplete } = await import('../utils/ai');
+      const aiTest = await aiComplete<any>('Return JSON: {"test": "ok"}', { maxTokens: 20, systemPrompt: 'Return only JSON' });
+      diag.steps.push({ step: 'ai', ok: true, result: JSON.stringify(aiTest).slice(0, 80) });
+    } catch (err: any) {
+      diag.steps.push({ step: 'ai', ok: false, error: err.message?.slice(0, 150) });
+      diag.errors.push(`AI: ${err.message?.slice(0, 150)}`);
+    }
+
+    // Step 3: Test providers
+    try {
+      const { providerRegistry } = await import('../services/providers/providerRegistry');
+      const available = providerRegistry.getAvailable();
+      diag.steps.push({ step: 'providers', ok: available.length > 0, count: available.length, names: available.map((p: any) => p.name) });
+      
+      // Try fetching 1 product
+      const products = await providerRegistry.searchAll({ keyword: 'tactical', maxResults: 3 });
+      diag.steps.push({ step: 'fetch', ok: products.length > 0, count: products.length, firstTitle: products[0]?.title?.slice(0, 50) });
+    } catch (err: any) {
+      diag.steps.push({ step: 'fetch', ok: false, error: err.message?.slice(0, 150) });
+      diag.errors.push(`Fetch: ${err.message?.slice(0, 150)}`);
+    }
+
+    // Step 4: Test batch scoring
+    try {
+      const { aiComplete } = await import('../utils/ai');
+      const scoreTest = await aiComplete<any>(`Score this product for a "hunting and outdoor" store:
+0. "Tactical Gloves" | $12 cost:$5 | 500 orders | 4.5★
+Return JSON array: [{"storeFit":80,"saturation":60,"viralScore":70,"trendStage":"rising_trend","winnerScore":75,"storeFitReason":"fits outdoor niche","viralReason":"useful product"}]`, { maxTokens: 300, systemPrompt: 'Return only JSON array' });
+      
+      const isArray = Array.isArray(scoreTest);
+      diag.steps.push({ step: 'scoring', ok: isArray, isArray, type: typeof scoreTest, result: JSON.stringify(scoreTest).slice(0, 200) });
+    } catch (err: any) {
+      diag.steps.push({ step: 'scoring', ok: false, error: err.message?.slice(0, 150) });
+      diag.errors.push(`Scoring: ${err.message?.slice(0, 150)}`);
+    }
+
+    // Step 5: Check DB save capability
+    try {
+      const count = await prisma.candidateProduct.count({ where: { shopId } });
+      diag.steps.push({ step: 'db', ok: true, existingCandidates: count });
+    } catch (err: any) {
+      diag.steps.push({ step: 'db', ok: false, error: err.message?.slice(0, 150) });
+    }
+
+    // Step 6: Check latest job status
+    const latestJob = await prisma.jobRun.findFirst({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS' },
+      orderBy: { createdAt: 'desc' },
+    });
+    diag.steps.push({ step: 'lastJob', status: latestJob?.status, error: latestJob?.error?.slice(0, 200), createdAt: latestJob?.createdAt });
+
+    res.json({ success: true, data: diag });
+  } catch (err: any) {
+    diag.errors.push(err.message);
+    res.json({ success: true, data: diag });
+  }
+});
+
 router.post('/research/start', researchRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
@@ -394,9 +466,16 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
       });
     }
 
-    // Check if already running
+    // Clean up stuck RUNNING jobs older than 5 minutes
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    await prisma.jobRun.updateMany({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { lt: fiveMinAgo } },
+      data: { status: 'FAILED', error: 'Timed out — auto-cleaned on next research start', completedAt: new Date() },
+    });
+
+    // Check if already running (only recent — within last 5 min)
     const running = await prisma.jobRun.findFirst({
-      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { gte: fiveMinAgo } },
     });
     if (running) {
       return res.json({ success: true, message: 'Research already running...', data: { status: 'RUNNING' } });
@@ -413,15 +492,18 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     // Run research in background (fire-and-forget)
     (async () => {
       try {
+        console.log(`[Research] Background task starting for job ${job.id}`);
         const { runResearchPipeline } = await import('../services/research/researchPipeline');
         const result = await runResearchPipeline(shopId);
+
+        console.log(`[Research] Pipeline returned: ${JSON.stringify({ saved: result.totalSaved, fetched: result.totalFetched, scored: result.totalScored })}`);
 
         await prisma.jobRun.update({
           where: { id: job.id },
           data: { status: 'COMPLETED', result: result as any, completedAt: new Date(), progress: 100 },
         });
 
-        console.log(`[Research] Completed: ${result.totalSaved} products saved`);
+        console.log(`[Research] ✅ Job ${job.id} COMPLETED: ${result.totalSaved} products saved`);
         logger.info('Research complete', { shopId, saved: result.totalSaved, fetched: result.totalFetched });
         await cache.invalidatePrefix(`dashboard:${shopId}`);
         await cache.invalidatePrefix(`candidates:${shopId}`);
@@ -433,11 +515,15 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
             { label: 'View Products', url: '/candidates' });
         } catch {}
       } catch (err: any) {
-        console.error('[Research] Background FAILED:', err.message);
+        const errorMsg = err.message?.slice(0, 500) || 'Unknown error';
+        const errorStack = err.stack?.slice(0, 300) || '';
+        console.error(`[Research] ❌ Background FAILED for job ${job.id}: ${errorMsg}`);
+        console.error(`[Research] Stack: ${errorStack}`);
+        
         await prisma.jobRun.update({
           where: { id: job.id },
-          data: { status: 'FAILED', error: err.message, completedAt: new Date() },
-        }).catch(() => {});
+          data: { status: 'FAILED', error: errorMsg, completedAt: new Date() },
+        }).catch((e: any) => console.error(`[Research] Failed to update job status: ${e.message}`));
       }
     })();
   } catch (err: any) {

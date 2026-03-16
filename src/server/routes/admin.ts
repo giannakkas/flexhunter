@@ -344,6 +344,40 @@ router.get('/config', (_req: Request, res: Response) => {
 });
 
 // ── API Health Check — tests every external service ──
+// ── Research Diagnostic ───────────────────────
+router.post('/research/diagnose/:shopId', async (req: Request, res: Response) => {
+  try {
+    const { shopId } = req.params;
+    
+    // First, clean up any stuck RUNNING jobs older than 10 minutes
+    const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000);
+    const stuckJobs = await prisma.jobRun.updateMany({
+      where: { shopId, status: 'RUNNING', jobType: 'RESEARCH_PRODUCTS', createdAt: { lt: tenMinAgo } },
+      data: { status: 'FAILED', error: 'Timed out — cleaned up by admin diagnostic', completedAt: new Date() },
+    });
+
+    const latestJobs = await prisma.jobRun.findMany({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS' },
+      orderBy: { createdAt: 'desc' },
+      take: 5,
+    });
+
+    const candidates = await prisma.candidateProduct.count({ where: { shopId } });
+    
+    res.json({
+      stuckJobsCleaned: stuckJobs.count,
+      existingCandidates: candidates,
+      recentJobs: latestJobs.map(j => ({
+        id: j.id, status: j.status, error: j.error?.slice(0, 200),
+        createdAt: j.createdAt, completedAt: j.completedAt,
+        result: j.result ? JSON.stringify(j.result).slice(0, 200) : null,
+      })),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/api-health', async (_req: Request, res: Response) => {
   // Cache health check for 5 minutes — prevents burning API quota
   const cached = await cache.get('admin:api-health');
