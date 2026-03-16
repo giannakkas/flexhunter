@@ -476,23 +476,6 @@ router.get('/api-health', async (_req: Request, res: Response) => {
     results.push({ name: 'TikTok Trends (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
   }
 
-  // ── Shopify ──
-  const shop = await prisma.shop.findFirst({ where: { isActive: true, accessToken: { not: 'pending' } } }).catch(() => null);
-  if (shop?.accessToken) {
-    await testApi('Shopify Admin API', async () => {
-      const r = await fetch(`https://${shop.shopDomain}/admin/api/2024-01/shop.json`, {
-        headers: { 'X-Shopify-Access-Token': shop.accessToken! },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.status === 401) return { ok: false, detail: '401 Unauthorized — token expired, reinstall app' };
-      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
-      const data = await r.json();
-      return { ok: true, detail: `Connected to ${data.shop?.name || shop.shopDomain}` };
-    });
-  } else {
-    results.push({ name: 'Shopify Admin API', status: shop ? 'error' : 'not_configured', latency: 0, detail: shop ? 'Token is pending — reinstall app' : 'No active shop found', configured: !!shop });
-  }
-
   // ── Database ──
   await testApi('PostgreSQL Database', async () => {
     const count = await prisma.shop.count();
