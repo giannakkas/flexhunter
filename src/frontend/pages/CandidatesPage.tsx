@@ -164,7 +164,8 @@ export function CandidatesPage() {
 
   const handleResearch = async () => {
     setResearchRunning(true);
-    setResearchProgress(0);
+    setResearchProgress(1);
+    setResearchStage('🔑 Starting AI Research Engine...');
     setData([]);
 
     const stages = [
