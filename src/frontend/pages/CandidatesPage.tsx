@@ -145,7 +145,7 @@ function ScorePanel({ item, onClose }: { item: any; onClose: () => void }) {
 }
 
 export function CandidatesPage() {
-  const { data: candidates, get, loading } = useApi<any[]>();
+  const { data: candidates, get, loading, setData } = useApi<any[]>();
   const [preview, setPreview] = useState<any>(null);
   const [scoreItem, setScoreItem] = useState<any>(null);
   const [busy, setBusy] = useState<string | null>(null);
