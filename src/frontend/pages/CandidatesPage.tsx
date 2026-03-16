@@ -184,12 +184,28 @@ export function CandidatesPage() {
 
     // Start progress timer IMMEDIATELY (don't wait for API calls)
     let prog = 1;
+    let tickCount = 0;
     const interval = setInterval(() => {
-      prog += Math.random() * 0.8 + 0.2; // Slower increment for 5-min research
-      if (prog > 95) prog = 95;
+      tickCount++;
+      if (prog < 95) {
+        prog += Math.random() * 0.8 + 0.2;
+        if (prog > 95) prog = 95;
+      }
       setResearchProgress(prog);
       const stage = [...stages].reverse().find(s => prog >= s.at);
-      if (stage) setResearchStage(stage.text);
+      if (stage && prog < 95) setResearchStage(stage.text);
+      
+      // After 95%, show time-based messages so user knows it's not stuck
+      if (prog >= 95) {
+        const messages = [
+          '✅ Almost done — AI is finalizing scores...',
+          '⏳ DeepSeek is analyzing products — this takes 2-4 minutes...',
+          '🔬 Still working — scoring products against your store DNA...',
+          '📊 Ranking products by fit, profit, and viral potential...',
+          '💾 Writing results to database...',
+        ];
+        setResearchStage(messages[Math.floor(tickCount / 8) % messages.length]);
+      }
     }, 1000);
 
     // Clear old candidates (fire and forget — don't block)
@@ -222,18 +238,23 @@ export function CandidatesPage() {
             if (job.status === 'FAILED') {
               clearInterval(interval);
               setResearchRunning(false);
-              setMsg(friendlyError(job.error || 'Research failed'));
+              // Still try to load any products that were saved before failure
+              await get('/candidates?status=CANDIDATE&sort=score');
+              setMsg(friendlyError(job.error || 'Research failed — some products may still have been found'));
               return;
             }
-            // Still running — continue polling
+            
+            // Still running — periodically check if products were saved already
+            if (i > 0 && i % 10 === 0) {
+              await get('/candidates?status=CANDIDATE&sort=score');
+            }
           } catch {}
         }
-        // Timeout after 8 min of polling
+        // Timeout — load whatever was saved
         clearInterval(interval);
         setResearchRunning(false);
-        // Try loading whatever was saved
         await get('/candidates?status=CANDIDATE&sort=score');
-        setMsg('Research is taking longer than expected. Check back in a moment.');
+        setMsg('Research is taking longer than expected. Products found so far are shown below.');
       };
 
       pollForResults();
