@@ -167,7 +167,10 @@ export function CandidatesPage() {
     setResearchProgress(0);
     setResearchStage('🗑️ Clearing old results...');
 
-    // Clear old candidates first
+    // Clear frontend state immediately
+    setData([]);
+
+    // Clear old candidates in DB
     await apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
 
     setResearchStage('Initializing Multi-Agent AI Engine...');

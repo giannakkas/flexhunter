@@ -377,41 +377,74 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     };
   }
 
+  // Delete old candidates that haven't been imported
+  // First find IDs of candidates that HAVE been imported (to exclude them)
+  const importedCandidateIds = await prisma.importedProduct.findMany({
+    where: { shopId },
+    select: { candidateId: true },
+  }).then(items => items.map(i => i.candidateId).filter(Boolean));
+
   const deletedOld = await prisma.candidateProduct.deleteMany({
-    where: { shopId, importedProduct: null },
+    where: {
+      shopId,
+      id: { notIn: importedCandidateIds },
+    },
   });
-  console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old candidates, saving ${scored.length} new`);
+  console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old candidates (preserved ${importedCandidateIds.length} imported), saving ${scored.length} new`);
 
   let savedCount = 0;
+  const saveErrors: string[] = [];
+  
   for (const product of scored) {
     try {
       const agentScore = product.agentScore;
 
+      // Build explanation safely
+      let explanation = agentScore.explanation || 'AI scored';
+      try {
+        const signals = buildSignals(product.providerProductId || 'unknown', shopId, agentScore, product);
+        const evLevel = signals.evidenceCompleteness >= 0.7 ? 'HIGH' : signals.evidenceCompleteness >= 0.4 ? 'MEDIUM' : 'LOW';
+        explanation = `[${evLevel} confidence, ${signals.signalCount}/22 signals] ${explanation}`;
+      } catch {}
+
+      // Safe array access
+      const fitReasons = [
+        ...(Array.isArray(agentScore.storeFit?.signals) ? agentScore.storeFit.signals.slice(0, 3) : []),
+        ...(Array.isArray(agentScore.profitability?.signals) ? agentScore.profitability.signals.slice(0, 2) : []),
+        ...(Array.isArray(agentScore.viralPrediction?.signals) ? agentScore.viralPrediction.signals.slice(0, 2) : []),
+      ].filter(s => typeof s === 'string' && s.length > 0);
+
+      const concerns = [
+        ...(agentScore.storeFit?.score < 60 ? ['Moderate store fit'] : []),
+        ...(agentScore.saturation?.score < 40 ? ['High market saturation'] : []),
+        ...(agentScore.supplierQuality?.score < 40 ? ['Shipping quality concerns'] : []),
+      ];
+
       const candidate = await prisma.candidateProduct.create({
         data: {
           shopId,
-          providerType: product.providerType,
-          providerProductId: product.providerProductId,
-          sourceUrl: product.sourceUrl,
-          sourceName: product.sourceName,
-          title: product.title,
-          description: product.description,
-          category: product.category,
-          subcategory: product.subcategory,
-          imageUrls: product.imageUrls,
-          variants: product.variants as any,
-          costPrice: product.costPrice,
-          suggestedPrice: product.suggestedPrice,
-          currency: product.currency,
-          shippingCost: product.shippingCost,
-          shippingDays: product.shippingDays,
-          shippingSpeed: product.shippingSpeed,
-          warehouseCountry: product.warehouseCountry,
-          reviewCount: product.reviewCount,
-          reviewRating: product.reviewRating,
-          orderVolume: product.orderVolume,
-          supplierRating: product.supplierRating,
-          rawData: product.rawData as any,
+          providerType: product.providerType || 'ALIEXPRESS',
+          providerProductId: product.providerProductId || `gen-${Date.now()}-${savedCount}`,
+          sourceUrl: product.sourceUrl || '',
+          sourceName: product.sourceName || 'Unknown',
+          title: product.title || 'Untitled Product',
+          description: product.description || '',
+          category: product.category || 'General',
+          subcategory: product.subcategory || '',
+          imageUrls: product.imageUrls || [],
+          variants: (product.variants as any) || [],
+          costPrice: product.costPrice || 0,
+          suggestedPrice: product.suggestedPrice || 0,
+          currency: product.currency || 'USD',
+          shippingCost: product.shippingCost || 0,
+          shippingDays: product.shippingDays || 15,
+          shippingSpeed: product.shippingSpeed || 'STANDARD',
+          warehouseCountry: product.warehouseCountry || 'CN',
+          reviewCount: product.reviewCount || 0,
+          reviewRating: product.reviewRating || 0,
+          orderVolume: product.orderVolume || 0,
+          supplierRating: product.supplierRating || 0,
+          rawData: (product.rawData as any) || {},
           researchBatchId: batchId,
           status: 'CANDIDATE',
         },
@@ -420,44 +453,36 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
       await prisma.candidateScore.create({
         data: {
           candidateId: candidate.id,
-          domainFit: agentScore.storeFit.score,
-          storeFit: agentScore.storeFit.score,
-          audienceFit: agentScore.storeFit.score,
-          trendFit: agentScore.trendPotential.score,
-          visualVirality: agentScore.viralPrediction.viralScore,
-          novelty: agentScore.saturation.score,
-          priceFit: agentScore.profitability.score,
-          marginFit: agentScore.profitability.score,
-          shippingFit: agentScore.supplierQuality.score,
-          saturationInverse: agentScore.saturation.score,
-          refundRiskInverse: agentScore.supplierQuality.score,
-          finalScore: agentScore.finalScore,
-          confidence: agentScore.storeFit.confidence,
-          explanation: (() => {
-            const signals = buildSignals(candidate.id, shopId, agentScore, product);
-            const evLevel = signals.evidenceCompleteness >= 0.7 ? 'HIGH' : signals.evidenceCompleteness >= 0.4 ? 'MEDIUM' : 'LOW';
-            return `[${evLevel} confidence, ${signals.signalCount}/22 signals] ${agentScore.explanation}`;
-          })(),
-          fitReasons: [
-            ...agentScore.storeFit.signals,
-            ...agentScore.profitability.signals.slice(0, 2),
-            ...agentScore.viralPrediction.signals.slice(0, 2),
-            ...agentScore.trendPotential.signals.slice(0, 1),
-          ],
-          concerns: [
-            ...(agentScore.storeFit.score < 60 ? ['Moderate store fit'] : []),
-            ...(agentScore.saturation.score < 40 ? ['High market saturation'] : []),
-            ...(agentScore.supplierQuality.score < 40 ? ['Shipping quality concerns'] : []),
-            ...(agentScore.viralPrediction.trendStage === 'saturated' ? ['Product may be past peak'] : []),
-          ],
+          domainFit: agentScore.storeFit?.score || 50,
+          storeFit: agentScore.storeFit?.score || 50,
+          audienceFit: agentScore.storeFit?.score || 50,
+          trendFit: agentScore.trendPotential?.score || 50,
+          visualVirality: agentScore.viralPrediction?.viralScore || 30,
+          novelty: agentScore.saturation?.score || 50,
+          priceFit: agentScore.profitability?.score || 50,
+          marginFit: agentScore.profitability?.score || 50,
+          shippingFit: agentScore.supplierQuality?.score || 50,
+          saturationInverse: agentScore.saturation?.score || 50,
+          refundRiskInverse: agentScore.supplierQuality?.score || 50,
+          finalScore: agentScore.finalScore || 50,
+          confidence: agentScore.storeFit?.confidence || 0.5,
+          explanation,
+          fitReasons,
+          concerns,
           scoredAt: new Date(),
         },
       });
 
       savedCount++;
-    } catch (err) {
-      console.warn(`[Research] Failed to save "${product.title}":`, err);
+    } catch (err: any) {
+      const msg = err.message?.slice(0, 200) || 'Unknown error';
+      console.error(`[Research] ❌ SAVE FAILED for "${product.title?.slice(0, 40)}": ${msg}`);
+      saveErrors.push(msg);
     }
+  }
+
+  if (saveErrors.length > 0) {
+    console.error(`[Research] Save errors (${saveErrors.length}/${scored.length}): ${saveErrors[0]}`);
   }
 
   // Audit log
