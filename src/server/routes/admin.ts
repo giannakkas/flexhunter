@@ -425,22 +425,6 @@ router.get('/api-health', async (_req: Request, res: Response) => {
     results.push({ name: 'CJ Dropshipping', status: 'not_configured', latency: 0, detail: 'CJ_API_KEY not set', configured: false });
   }
 
-  // ── Google Trends (RapidAPI) ──
-  if (process.env.RAPIDAPI_KEY) {
-    await testApi('Google Trends (RapidAPI)', async () => {
-      const r = await fetch('https://google-trends8.p.rapidapi.com/trendings?region_code=US&hl=en-US', {
-        headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
-        signal: AbortSignal.timeout(8000),
-      });
-      if (r.status === 403) return { ok: false, detail: 'Not subscribed — subscribe at rapidapi.com' };
-      if (r.status === 429) return { ok: false, detail: 'Rate limited' };
-      if (!r.ok) return { ok: false, detail: `HTTP ${r.status}` };
-      return { ok: true, detail: 'Connected & returning trends' };
-    });
-  } else {
-    results.push({ name: 'Google Trends (RapidAPI)', status: 'not_configured', latency: 0, detail: 'RAPIDAPI_KEY not set', configured: false });
-  }
-
   // ── Amazon Data (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('Amazon Data (RapidAPI)', async () => {

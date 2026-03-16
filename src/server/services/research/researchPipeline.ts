@@ -320,9 +320,9 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   }
 
   const deletedOld = await prisma.candidateProduct.deleteMany({
-    where: { shopId, status: { in: ['CANDIDATE', 'REJECTED'] }, importedProduct: null },
+    where: { shopId, importedProduct: null },
   });
-  console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old, saving ${scored.length} new`);
+  console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old candidates, saving ${scored.length} new`);
 
   let savedCount = 0;
   for (const product of scored) {
