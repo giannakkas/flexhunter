@@ -1,21 +1,39 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export function AppHeader({ candidateCount = 0 }: { candidateCount?: number }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const [researchRunning, setResearchRunning] = useState(false);
+
+  // Poll for research status every 5 seconds
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const r = await fetch('/api/research/status', { headers: { 'x-shop-domain': sessionStorage.getItem('shopDomain') || 'unknown' } });
+        const d = await r.json();
+        if (!cancelled) setResearchRunning(d?.data?.status === 'RUNNING');
+      } catch {}
+    };
+    check();
+    const interval = setInterval(check, 5000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
 
   const isActive = (path: string) => location.pathname === path;
 
   const navItems = [
     { path: '/', label: 'Dashboard' },
     { path: '/research', label: 'Store DNA' },
-    { path: '/candidates', label: 'Research' },
+    { path: '/candidates', label: 'Research', isResearch: true },
     { path: '/selections', label: 'Candidates', count: candidateCount },
     { path: '/imports', label: 'Imported' },
   ];
 
   return (
+    <>
+    <style>{`@keyframes pulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.5; transform: scale(1.3); } }`}</style>
     <div style={{
       background: 'linear-gradient(135deg, #0D1117 0%, #161B22 50%, #1A2332 100%)',
       padding: '10px 20px',
@@ -39,6 +57,13 @@ export function AppHeader({ candidateCount = 0 }: { candidateCount?: number }) {
             cursor: 'pointer', transition: 'all 0.15s ease', whiteSpace: 'nowrap',
             display: 'flex', alignItems: 'center', gap: 6,
           }}>
+            {(item as any).isResearch && researchRunning && (
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', background: '#3FB950',
+                animation: 'pulse 1.5s ease-in-out infinite',
+                boxShadow: '0 0 6px #3FB950',
+              }} />
+            )}
             {item.label}
             {item.count !== undefined && item.count > 0 && (
               <span style={{
@@ -59,5 +84,6 @@ export function AppHeader({ candidateCount = 0 }: { candidateCount?: number }) {
         }}>SEO Optimizer</button>
       </div>
     </div>
+    </>
   );
 }

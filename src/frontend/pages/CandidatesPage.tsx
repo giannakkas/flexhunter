@@ -162,6 +162,62 @@ export function CandidatesPage() {
 
   useEffect(() => { get('/candidates?status=CANDIDATE&sort=score'); }, [get]);
 
+  // Auto-detect if research is already running (e.g., user navigated away and came back)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const status = await apiFetch<any>('/research/status');
+        const job = status?.data;
+        if (!job || job.status !== 'RUNNING' || cancelled) return;
+        
+        // Research is running — resume progress UI
+        setResearchRunning(true);
+        setResearchProgress(50);
+        setResearchStage('⏳ Research in progress — resuming...');
+
+        // Start polling
+        for (let i = 0; i < 160; i++) {
+          if (cancelled) return;
+          await new Promise(r => setTimeout(r, 3000));
+          try {
+            const s = await apiFetch<any>('/research/status');
+            const j = s?.data;
+            if (!j) continue;
+
+            // Update stage message
+            const msgs = [
+              '🔬 AI is scoring products...',
+              '⏳ DeepSeek analyzing your niche...',
+              '📊 Ranking by fit, profit & trend...',
+              '💾 Saving winning products...',
+            ];
+            setResearchStage(msgs[i % msgs.length]);
+            setResearchProgress(Math.min(95, 50 + i * 0.5));
+
+            if (j.status === 'COMPLETED') {
+              setResearchProgress(100);
+              const saved = (j.result as any)?.totalSaved || 0;
+              setResearchStage(`✅ Research complete! Found ${saved} products.`);
+              await get('/candidates?status=CANDIDATE&sort=score');
+              setTimeout(() => { if (!cancelled) setResearchRunning(false); }, 2000);
+              return;
+            }
+            if (j.status === 'FAILED') {
+              setResearchRunning(false);
+              await get('/candidates?status=CANDIDATE&sort=score');
+              return;
+            }
+            // Periodically load products
+            if (i % 10 === 0) await get('/candidates?status=CANDIDATE&sort=score');
+          } catch {}
+        }
+        if (!cancelled) { setResearchRunning(false); await get('/candidates?status=CANDIDATE&sort=score'); }
+      } catch {}
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line
+
   const handleResearch = async () => {
     setResearchRunning(true);
     setResearchProgress(1);
