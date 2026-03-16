@@ -365,7 +365,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── Gemini AI ──
   if (process.env.GEMINI_API_KEY) {
     await testApi('Gemini AI', async () => {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: 'Reply with just: OK' }] }], generationConfig: { maxOutputTokens: 10 } }),
         signal: AbortSignal.timeout(8000),
@@ -428,8 +428,7 @@ router.get('/api-health', async (_req: Request, res: Response) => {
   // ── Google Trends (RapidAPI) ──
   if (process.env.RAPIDAPI_KEY) {
     await testApi('Google Trends (RapidAPI)', async () => {
-      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
-      const r = await fetch(`https://google-trends8.p.rapidapi.com/trendings?region_code=US&date=${today}&hl=en-US`, {
+      const r = await fetch('https://google-trends8.p.rapidapi.com/trendings?region_code=US&hl=en-US', {
         headers: { 'x-rapidapi-key': process.env.RAPIDAPI_KEY!, 'x-rapidapi-host': 'google-trends8.p.rapidapi.com' },
         signal: AbortSignal.timeout(8000),
       });

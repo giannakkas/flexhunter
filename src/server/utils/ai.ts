@@ -1,12 +1,12 @@
 // ==============================================
-// AI Engine — Google Gemini 2.0 Flash
+// AI Engine — Google Gemini 2.5 Flash
 // ==============================================
-// Fast, accurate, essentially free for this volume.
+// Fast, accurate, cost-effective for product analysis.
 // Falls back to OpenAI if GEMINI_API_KEY not set.
 
 const GEMINI_MODELS = [
-  'gemini-1.5-flash',
-  'gemini-2.0-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
 ];
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 

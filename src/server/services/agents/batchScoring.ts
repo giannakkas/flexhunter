@@ -56,10 +56,20 @@ ${productSummaries}
 
 For each product return: storeFit(0-100), saturation(0-100), viralScore(0-100), trendStage, winnerScore(0-100), storeFitReason(short), viralReason(short), problemSolving(bool), wowFactor(bool), adFriendly(bool), giftWorthy(bool), impulsePrice(bool).
 
+SCORING GUIDE — USE THE FULL RANGE:
+- winnerScore 90-100: Perfect dropshipping product — high demand, great margins, fits this store perfectly
+- winnerScore 80-89: Strong winner — most signals are positive, worth importing
+- winnerScore 70-79: Decent product — some positive signals but not a clear winner
+- winnerScore 50-69: Mediocre — average product, nothing special
+- winnerScore 0-49: Bad fit — wrong niche, poor margins, or saturated
+
+Products that match the store niche, have good margins (>40%), are under $50, and are visual/shareable SHOULD score 85+.
+Be GENEROUS with winnerScore for genuinely good products. Don't default everything to 60-75.
+
 trendStage options: early_acceleration, breakout_candidate, rising_trend, stable_trend, saturated.
 
 Return ONLY a JSON array of ${products.length} objects:
-[{"storeFit":70,"saturation":60,"viralScore":55,"trendStage":"rising_trend","winnerScore":65,"storeFitReason":"fits outdoor niche","viralReason":"shareable design","problemSolving":true,"wowFactor":false,"adFriendly":true,"giftWorthy":false,"impulsePrice":true}]`;
+[{"storeFit":85,"saturation":70,"viralScore":78,"trendStage":"rising_trend","winnerScore":82,"storeFitReason":"perfect for outdoor niche","viralReason":"shareable survival content","problemSolving":true,"wowFactor":true,"adFriendly":true,"giftWorthy":true,"impulsePrice":true}]`;
 
   // Try up to 2 times
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -148,20 +158,18 @@ export async function runBatchMultiAgentScoring(
       explanation: ai?.viralReason || `${ai?.trendStage || 'stable'} — ${ai ? 'AI scored' : 'algorithmic only'}`,
     };
 
-    // Use winnerScore to boost final score
-    const winnerBonus = ((ai?.winnerScore || 50) - 50) * 0.1; // -5 to +5 points
-
-    // Weighted score
-    const WEIGHTS = { storeFit: 0.25, profitability: 0.15, trendPotential: 0.15, viralPrediction: 0.20, saturation: 0.10, supplierQuality: 0.15 };
-    let finalScore = Math.round(
-      storeFit.score * WEIGHTS.storeFit +
-      profit.score * WEIGHTS.profitability +
-      trend.score * WEIGHTS.trendPotential +
-      viral.viralScore * WEIGHTS.viralPrediction +
-      saturation.score * WEIGHTS.saturation +
-      supplier.score * WEIGHTS.supplierQuality +
-      winnerBonus
+    // Final score: 50% AI winnerScore + 50% weighted dimensions
+    const aiWinner = Math.min(100, Math.max(0, ai?.winnerScore || 50));
+    const dimensionScore = Math.round(
+      storeFit.score * 0.25 +
+      profit.score * 0.15 +
+      trend.score * 0.15 +
+      viral.viralScore * 0.20 +
+      saturation.score * 0.10 +
+      supplier.score * 0.15
     );
+    
+    let finalScore = Math.round(aiWinner * 0.50 + dimensionScore * 0.50);
     finalScore = Math.min(100, Math.max(0, finalScore));
 
     let recommendation: MultiAgentScore['recommendation'];
