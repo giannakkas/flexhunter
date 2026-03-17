@@ -172,7 +172,7 @@ function ResearchActivityFeed({ running }: { running: boolean }) {
     const interval = setInterval(() => {
       const msg = ACTIVITY_MESSAGES[Math.floor(Math.random() * ACTIVITY_MESSAGES.length)];
       const id = counterRef.current++;
-      setMessages(prev => [...prev.slice(-2), { id, text: msg, opacity: 1 }]);
+      setMessages(prev => [...prev.slice(-1), { id, text: msg, opacity: 1 }]);
       
       // Fade out after 3 seconds
       setTimeout(() => {
@@ -307,7 +307,12 @@ export function CandidatesPage() {
         const job = s?.data;
         if (job?.status === 'RUNNING') {
           const created = new Date(job.createdAt).getTime();
-          if (created > Date.now() - 5 * 60 * 1000) startPolling(50);
+          const ageMs = Date.now() - created;
+          if (ageMs < 5 * 60 * 1000) {
+            // Estimate progress from age: ~5 min total, cap at 85%
+            const estimatedProg = Math.min(85, Math.round((ageMs / (5 * 60 * 1000)) * 90));
+            startPolling(Math.max(10, estimatedProg));
+          }
         }
       } catch {}
     })();
