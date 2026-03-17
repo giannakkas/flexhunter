@@ -10,8 +10,8 @@ import { apiFetch } from '../hooks/useApi';
 const PLACEHOLDER = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png';
 
 const DIR_COLORS: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-  surging: { bg: '#FEE2E2', color: '#B91C1C', label: 'SURGING', icon: '🔥' },
-  rising: { bg: '#FEF9C3', color: '#A16207', label: 'RISING', icon: '📈' },
+  surging: { bg: '#DCFCE7', color: '#15803D', label: 'SURGING', icon: '🔥' },
+  rising: { bg: '#D1FAE5', color: '#047857', label: 'RISING', icon: '📈' },
   stable: { bg: '#EFF6FF', color: '#1D4ED8', label: 'STABLE', icon: '📊' },
   declining: { bg: '#F3F4F6', color: '#6B7280', label: 'DECLINING', icon: '📉' },
   unknown: { bg: '#F9FAFB', color: '#9CA3AF', label: 'NO DATA', icon: '❓' },

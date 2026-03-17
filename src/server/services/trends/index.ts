@@ -131,8 +131,14 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   // Google Trends daily-only API is limited; TikTok is niche-keyword-unfriendly
   let confidence = 0;
   if (google) confidence += 0.25;  // Google daily trends is limited data
-  if (tiktok) confidence += 0.35;  // TikTok is strong signal when available
-  if (amazon) confidence += 0.40;  // Amazon is the most reliable for product demand
+  if (tiktok) confidence += 0.30;  // TikTok is strong signal when available
+  if (amazon) {
+    confidence += 0.45;  // Amazon is the most reliable for product demand
+    // Extra confidence boost for very strong Amazon data
+    if (amazon.demandSignal === 'high' && amazon.avgRating >= 4.5 && amazon.productCount >= 40) {
+      confidence += 0.15; // Very strong Amazon signal = high confidence even alone
+    }
+  }
   confidence = Math.min(1, confidence);
   
   // Minimum confidence floor when at least one source responded
@@ -143,8 +149,9 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   if (google?.isBreakout || (tiktok?.isHot && google?.isRising)) trendDirection = 'surging';
   else if (tiktok?.isHot || (tiktok?.growthRate || 0) > 50) trendDirection = 'surging';
   else if (google?.isRising || (tiktok?.growthRate || 0) > 30) trendDirection = 'rising';
+  else if (amazon?.demandSignal === 'high' && amazon.productCount >= 40 && amazon.avgRating >= 4.5) trendDirection = 'rising'; // Proven strong demand
   else if (amazon?.demandSignal === 'high' && (tiktok?.viewCount || 0) > 100_000) trendDirection = 'rising';
-  else if (amazon?.demandSignal === 'high') trendDirection = 'stable'; // High Amazon demand = proven product
+  else if (amazon?.demandSignal === 'high') trendDirection = 'stable';
   else if (google && google.change30d < -20) trendDirection = 'declining';
   else if (sourcesResponded > 0) trendDirection = 'stable';
 
