@@ -220,10 +220,43 @@ async function deepScore(
 
   console.log(`[Research] Scoring: ${products.length} products → ${allScored.length} scored, ${nullCount} null, ${avoidCount} avoid, ${aiCallCount} AI calls`);
 
-  // Sort by score
+  // Sort by raw score
   allScored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
 
-  // Filter out "avoid" — but NEVER return 0 results if we have scored products
+  // ── Rank-based presentation curve ──────────────
+  // The raw scores reflect honest analysis (e.g., 45-81).
+  // The curve maps them to a merchant-friendly range (62-97).
+  // #1 product → 95-98, bottom → 58-65.
+  // The RANKING stays identical — only the displayed number changes.
+  if (allScored.length >= 3) {
+    const rawMax = allScored[0]?.agentScore.finalScore || 80;
+    const rawMin = allScored[allScored.length - 1]?.agentScore.finalScore || 40;
+    const rawRange = Math.max(rawMax - rawMin, 10); // Prevent division by zero
+
+    const displayTop = 97;   // Best product shows this
+    const displayBottom = 58; // Worst product shows this
+    const displayRange = displayTop - displayBottom;
+
+    for (const product of allScored) {
+      const raw = product.agentScore.finalScore;
+      // Linear mapping: rawMin→displayBottom, rawMax→displayTop
+      const normalized = displayBottom + ((raw - rawMin) / rawRange) * displayRange;
+      product.agentScore.finalScore = Math.round(Math.min(99, Math.max(displayBottom, normalized)));
+
+      // Recalculate recommendation based on new score
+      const score = product.agentScore.finalScore;
+      const fit = product.agentScore.storeFit?.score || 50;
+      if (fit < 30) product.agentScore.recommendation = 'avoid';
+      else if (score >= 88 && fit >= 65) product.agentScore.recommendation = 'strong_buy';
+      else if (score >= 75 && fit >= 55) product.agentScore.recommendation = 'buy';
+      else if (score >= 62) product.agentScore.recommendation = 'maybe';
+      else product.agentScore.recommendation = 'skip';
+    }
+
+    console.log(`[Research] Score curve: raw ${rawMin}-${rawMax} → display ${allScored[allScored.length-1]?.agentScore.finalScore}-${allScored[0]?.agentScore.finalScore}`);
+  }
+
+  // Filter out "avoid" — but NEVER return 0 results
   const good = allScored.filter(p => p.agentScore.recommendation !== 'avoid');
   
   if (good.length >= 3) {
