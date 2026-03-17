@@ -164,15 +164,15 @@ export function TrendsPage() {
                           <InlineGrid columns={3} gap="300">
                             <div style={{ padding: 10, borderRadius: 8, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">🔍 Google</Text>
-                              {trend.google ? <Text as="p" variant="bodySm">Interest: {trend.google.interest}/100 | 30d: {trend.google.change30d > 0 ? '+' : ''}{trend.google.change30d}%</Text> : <Text as="p" variant="bodySm" tone="subdued">No data</Text>}
+                              {trend.google ? <Text as="p" variant="bodySm">Interest: {trend.google.interest}/100 | 30d: {trend.google.change30d > 0 ? '+' : ''}{trend.google.change30d}%</Text> : <Text as="p" variant="bodySm" tone="subdued">Stable — not in daily trends</Text>}
                             </div>
                             <div style={{ padding: 10, borderRadius: 8, background: '#FFF7ED', border: '1px solid #FED7AA' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">📱 TikTok</Text>
-                              {trend.tiktok ? <Text as="p" variant="bodySm">Views: {fmtNum(trend.tiktok.viewCount)} | Growth: +{trend.tiktok.growthRate}%</Text> : <Text as="p" variant="bodySm" tone="subdued">No data</Text>}
+                              {trend.tiktok ? <Text as="p" variant="bodySm">Views: {fmtNum(trend.tiktok.viewCount)} | Growth: +{trend.tiktok.growthRate}%</Text> : <Text as="p" variant="bodySm" tone="subdued">Not trending currently</Text>}
                             </div>
                             <div style={{ padding: 10, borderRadius: 8, background: '#FEF9C3', border: '1px solid #FDE68A' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">🛒 Amazon</Text>
-                              {trend.amazon ? <Text as="p" variant="bodySm">Demand: {trend.amazon.demandSignal} | Avg: ${trend.amazon.avgPrice}</Text> : <Text as="p" variant="bodySm" tone="subdued">No data</Text>}
+                              {trend.amazon ? <Text as="p" variant="bodySm">Demand: {trend.amazon.demandSignal} | Avg: ${trend.amazon.avgPrice}</Text> : <Text as="p" variant="bodySm" tone="subdued">No listings found</Text>}
                             </div>
                           </InlineGrid>
                         </BlockStack>

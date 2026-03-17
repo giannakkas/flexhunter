@@ -5,7 +5,7 @@
 // into a unified trend signal for each keyword.
 
 import { getGoogleTrends, TrendData } from './googleTrends';
-import { getTikTokTrends, TikTokTrend } from './tiktokTrends';
+import { getTikTokTrends, TikTokTrendData } from './tiktokTrends';
 import { getAmazonTrends, AmazonTrend } from './amazonTrends';
 
 export interface AggregatedTrend {
@@ -13,7 +13,7 @@ export interface AggregatedTrend {
   overallScore: number;      // 0-100
   trendDirection: 'surging' | 'rising' | 'stable' | 'declining' | 'unknown';
   google: TrendData | null;
-  tiktok: TikTokTrend | null;
+  tiktok: TikTokTrendData | null;
   amazon: AmazonTrend | null;
   signals: string[];
   confidence: number;
@@ -30,7 +30,7 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
     getAmazonTrends(keyword).catch(() => null),
   ]);
 
-  let score = 40; // baseline
+  let score = 50; // baseline — most products are "stable"
   const signals: string[] = [];
   let sourcesResponded = 0;
 
@@ -62,18 +62,21 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   // ── TikTok signals ────────
   if (tiktok) {
     sourcesResponded++;
-    if (tiktok.isViral) {
+    if (tiktok.isHot) {
       score += 25;
-      signals.push(`🔥 TikTok: VIRAL — ${formatNumber(tiktok.viewCount)} views`);
+      signals.push(`🔥 TikTok: HOT trend — ${formatNumber(tiktok.viewCount)} views`);
     } else if (tiktok.viewCount > 1_000_000) {
       score += 15;
       signals.push(`📱 TikTok: ${formatNumber(tiktok.viewCount)} views, ${formatNumber(tiktok.videoCount)} videos`);
     } else if (tiktok.viewCount > 100_000) {
-      score += 8;
+      score += 10;
       signals.push(`📱 TikTok: ${formatNumber(tiktok.viewCount)} views`);
     } else if (tiktok.videoCount > 100) {
       score += 5;
-      signals.push(`📱 TikTok: Growing presence (${tiktok.videoCount} videos)`);
+      signals.push(`📱 TikTok: Growing (${tiktok.videoCount} videos)`);
+    } else if (tiktok.videoCount > 0) {
+      score += 3;
+      signals.push(`📱 TikTok: ${tiktok.videoCount} videos found`);
     }
 
     if (tiktok.growthRate > 50) {
@@ -86,12 +89,13 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   if (amazon) {
     sourcesResponded++;
     if (amazon.demandSignal === 'high') {
-      score += 15;
+      score += 20;
       signals.push(`🛒 Amazon: High demand (${amazon.productCount}+ listings, avg $${amazon.avgPrice})`);
     } else if (amazon.demandSignal === 'medium') {
-      score += 8;
+      score += 12;
       signals.push(`🛒 Amazon: Moderate demand (${amazon.productCount} listings)`);
     } else {
+      score += 3;
       signals.push(`🛒 Amazon: Low demand`);
     }
 
@@ -106,11 +110,16 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
     signals.push('⚠️ No external trend data available');
   }
 
+  // If only 1 source responded with good data, boost score (partial data penalty was too harsh)
+  if (sourcesResponded === 1 && score >= 55) {
+    score += 8; // Compensate for missing sources
+  }
+
   score = Math.min(100, Math.max(0, score));
 
   // Determine direction
   let trendDirection: AggregatedTrend['trendDirection'] = 'unknown';
-  if (google?.isBreakout || (tiktok?.isViral && google?.isRising)) trendDirection = 'surging';
+  if (google?.isBreakout || (tiktok?.isHot && google?.isRising)) trendDirection = 'surging';
   else if (google?.isRising || (tiktok?.growthRate || 0) > 30) trendDirection = 'rising';
   else if (google && google.change30d < -20) trendDirection = 'declining';
   else if (sourcesResponded > 0) trendDirection = 'stable';
