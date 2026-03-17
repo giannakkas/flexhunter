@@ -306,15 +306,17 @@ export async function relevanceFilterAgent(
   // Send batch of titles to AI for fast filtering
   const titles = products.map((p, i) => `${i}. ${p.title}`).join('\n');
 
-  const prompt = `You are a strict product relevance filter for a store that sells: "${storeDescription}"
+  const prompt = `You are a product relevance filter for a store that sells: "${storeDescription}"
 
-Here are ${products.length} products. Return ONLY the index numbers of products that CLEARLY belong in this store.
+Here are ${products.length} products. Return the index numbers of products that are RELEVANT or RELATED to this store's niche.
 
 RULES:
-- ONLY include products that a customer would EXPECT to find in a "${storeDescription}" store
-- REJECT anything even slightly unrelated
-- When in doubt, EXCLUDE
-- Return at least 3 if any are relevant, but never include irrelevant products
+- Include products that fit the store's niche, theme, or target audience
+- Include complementary products and accessories that make sense for this store
+- Include products a customer of this store would reasonably be interested in
+- ONLY exclude products that are completely unrelated to the store
+- When in doubt, INCLUDE — the scoring engine will rank them later
+- Try to include at least 60-70% of the products
 
 PRODUCTS:
 ${titles}
@@ -325,7 +327,7 @@ Return JSON: {"relevant": [array of index numbers]}`;
     const result = await aiComplete<{ relevant: number[] }>(prompt, {
       temperature: 0.1,
       maxTokens: 500,
-      systemPrompt: `Strict relevance filter for "${storeDescription}" store. Return only JSON with "relevant" array of index numbers.`,
+      systemPrompt: `Inclusive relevance filter for "${storeDescription}" store. Include anything related to the niche. Return only JSON with "relevant" array of index numbers.`,
     });
     if (result.relevant && Array.isArray(result.relevant)) {
       return result.relevant.filter(i => i >= 0 && i < products.length);

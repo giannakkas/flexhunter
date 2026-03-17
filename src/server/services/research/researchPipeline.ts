@@ -323,33 +323,23 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     // If filter was too strict, take top by order volume as fallback
     console.warn(`[Research] Relevance filter returned 0! Using top ${maxCandidates} by volume.`);
     relevant.push(...allProducts.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates));
+  } else if (relevant.length < 10 && allProducts.length >= 20) {
+    // Filter was too aggressive — supplement with top sellers not already included
+    console.warn(`[Research] Relevance filter too strict: only ${relevant.length} of ${allProducts.length}. Supplementing with top sellers.`);
+    const relevantIds = new Set(relevant.map(p => `${p.providerType}-${p.providerProductId}`));
+    const extras = allProducts
+      .filter(p => !relevantIds.has(`${p.providerType}-${p.providerProductId}`))
+      .sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0))
+      .slice(0, maxCandidates - relevant.length);
+    relevant.push(...extras);
+    console.log(`[Research] After supplement: ${relevant.length} products`);
   }
 
-  // Step 4.5: Keyword-based store-fit safety net (NO AI needed)
-  // Removes products that clearly don't match the store niche
-  const nicheKeywords = (dna.nicheKeywords || []).map(k => k.toLowerCase());
-  const storeWords = storeDesc.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const allNicheWords = [...new Set([...nicheKeywords, ...storeWords])].filter(Boolean);
+  // Step 4.5 removed — the AI relevance filter in Step 4 already handles niche matching.
+  // The old keyword filter was too strict: it required exact word matches from store description,
+  // which eliminated good products that used different terminology (e.g., "tactical" vs "outdoor").
 
-  if (allNicheWords.length > 0) {
-    const beforeCount = relevant.length;
-    relevant = relevant.filter(p => {
-      const titleLower = (p.title + ' ' + p.category + ' ' + p.description).toLowerCase();
-      // Product must match at least 1 niche keyword
-      const matches = allNicheWords.some(kw => titleLower.includes(kw));
-      return matches;
-    });
-
-    // If keyword filter removed too many, keep top half by volume
-    if (relevant.length < 5 && beforeCount > 5) {
-      console.warn(`[Research] Keyword filter too strict (${beforeCount} → ${relevant.length}). Relaxing...`);
-      relevant = allProducts.sort((a, b) => (b.orderVolume || 0) - (a.orderVolume || 0)).slice(0, maxCandidates);
-    } else {
-      console.log(`[Research] Step 4.5: Keyword filter: ${beforeCount} → ${relevant.length} (matched niche: ${allNicheWords.slice(0, 5).join(', ')})`);
-    }
-  }
-
-  console.log(`[Research] Step 4/6: ${relevant.length} relevant products`);
+  console.log(`[Research] Step 4/6: ${relevant.length} relevant products after AI filter`);
 
   // Step 5: Multi-Agent Deep Scoring
   console.log(`[Research] Step 5/6: Running BATCH AI scoring (1 call per 5 products)...`);
