@@ -157,6 +157,8 @@ export function TrendsPage() {
                                 <InlineStack gap="200">
                                   <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: dir.bg, color: dir.color }}>{dir.icon} {dir.label}</span>
                                   <Badge tone="info">Confidence: {(trend.confidence * 100).toFixed(0)}%</Badge>
+                                  {!trend.tiktok && <span style={{ fontSize: 10, color: '#9CA3AF' }}>TikTok: no match</span>}
+                                  {!trend.google && <span style={{ fontSize: 10, color: '#9CA3AF' }}>Google: no data</span>}
                                 </InlineStack>
                               </BlockStack>
                             </InlineStack>
@@ -179,7 +181,7 @@ export function TrendsPage() {
                             </div>
                             <div style={{ padding: 10, borderRadius: 8, background: '#FFF7ED', border: '1px solid #FED7AA' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">📱 TikTok</Text>
-                              {trend.tiktok ? <Text as="p" variant="bodySm">Views: {fmtNum(trend.tiktok.viewCount)} | Growth: +{trend.tiktok.growthRate}%</Text> : <Text as="p" variant="bodySm" tone="subdued">Not trending currently</Text>}
+                              {trend.tiktok ? <Text as="p" variant="bodySm">Views: {fmtNum(trend.tiktok.viewCount)} | Growth: +{trend.tiktok.growthRate}%</Text> : <Text as="p" variant="bodySm" tone="subdued">No niche match — try broader terms</Text>}
                             </div>
                             <div style={{ padding: 10, borderRadius: 8, background: '#FEF9C3', border: '1px solid #FDE68A' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">🛒 Amazon</Text>

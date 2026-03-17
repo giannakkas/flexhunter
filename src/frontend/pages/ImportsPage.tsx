@@ -89,9 +89,9 @@ export function ImportsPage() {
                   display: 'flex', flexDirection: 'column',
                 }}>
                   {/* Image */}
-                  <div style={{ position: 'relative', height: 180, background: '#F9FAFB', overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ position: 'relative', height: 180, background: '#f5f5f5', overflow: 'hidden', flexShrink: 0 }}>
                     <img src={imgUrl} alt={item.importedTitle}
-                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e: any) => { e.target.src = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'; }}
                     />
                     {/* Status badge */}
@@ -122,12 +122,21 @@ export function ImportsPage() {
                           {(item.importedTitle || '').slice(0, 60)}{item.importedTitle?.length > 60 ? '...' : ''}
                         </Text>
 
-                        {/* Metrics row */}
+                        {/* Metrics grid — matching Research style */}
                         {cost > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7280' }}>
-                            <span>Cost: <b style={{ color: '#374151' }}>${cost.toFixed(2)}</b></span>
-                            <span>Profit: <b style={{ color: profit > 10 ? '#059669' : '#D97706' }}>${profit.toFixed(2)}</b></span>
-                            <span>Margin: <b style={{ color: margin > 50 ? '#059669' : '#D97706' }}>{margin.toFixed(0)}%</b></span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 4, background: '#FAFBFC', borderRadius: 8, padding: '8px 6px' }}>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: '#6D7175', textTransform: 'uppercase', fontWeight: 600 }}>Cost</div>
+                              <div style={{ fontSize: 14, fontWeight: 700 }}>${cost.toFixed(2)}</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: '#6D7175', textTransform: 'uppercase', fontWeight: 600 }}>Profit</div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: profit > 10 ? '#059669' : '#D97706' }}>${profit.toFixed(2)}</div>
+                            </div>
+                            <div style={{ textAlign: 'center' }}>
+                              <div style={{ fontSize: 9, color: '#6D7175', textTransform: 'uppercase', fontWeight: 600 }}>Margin</div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: margin > 50 ? '#059669' : '#D97706' }}>{margin.toFixed(0)}%</div>
+                            </div>
                           </div>
                         )}
 
@@ -147,10 +156,12 @@ export function ImportsPage() {
                           </div>
                         )}
 
-                        {/* Shopify status */}
-                        <div style={{ fontSize: 11, color: '#9CA3AF' }}>
-                          {item.shopifyStatus === 'MOCK' ? '⚠️ Not in Shopify — mock import' : item.shopifyHandle ? `/${item.shopifyHandle}` : 'In Shopify'}
-                        </div>
+                        {/* Shopify status — only show if mock */}
+                        {item.shopifyStatus === 'MOCK' && (
+                          <div style={{ fontSize: 11, color: '#9CA3AF', padding: '4px 8px', background: '#FEF3C7', borderRadius: 6, textAlign: 'center' }}>
+                            ⚠️ Mock import — not synced to Shopify
+                          </div>
+                        )}
                       </BlockStack>
                     </div>
 

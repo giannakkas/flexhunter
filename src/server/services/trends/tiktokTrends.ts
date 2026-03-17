@@ -29,39 +29,63 @@ export async function getTikTokTrends(keyword: string): Promise<TikTokTrendData 
   const apiKey = process.env.RAPIDAPI_KEY;
   if (!apiKey) return null;
 
-  try {
-    // Try trending keyword endpoint
-    const res = await fetch(
-      `https://${TIKTOK_HOST}/api/trending/keyword?keyword=${encodeURIComponent(keyword)}&country=us&period=120`,
-      { headers: headers(), signal: AbortSignal.timeout(8000) }
-    );
+  // Try multiple keyword variations (compound keywords rarely match TikTok's data)
+  const variations = getKeywordVariations(keyword);
+  
+  for (const kw of variations) {
+    try {
+      const res = await fetch(
+        `https://${TIKTOK_HOST}/api/trending/keyword?keyword=${encodeURIComponent(kw)}&country=us&period=120`,
+        { headers: headers(), signal: AbortSignal.timeout(8000) }
+      );
 
-    if (!res.ok) {
-      console.warn(`[TikTok] Trending keyword failed: ${res.status}`);
-      return tryHashtagFallback(keyword);
-    }
-
-    const data = await res.json();
-    
-    // Parse response
-    const items = data?.data?.keyword_list || data?.data?.list || data?.data || [];
-    if (Array.isArray(items) && items.length > 0) {
-      const item = items[0];
-      return {
-        keyword,
-        viewCount: item.video_view_count || item.view_count || item.publish_cnt || 0,
-        videoCount: item.video_count || item.publish_cnt || 0,
-        growthRate: item.trend || item.growth_rate || item.value_change_rate || 0,
-        isHot: !!(item.is_hot || item.trend > 50),
-        relatedHashtags: (items.slice(1, 4).map((i: any) => i.keyword || i.hashtag_name || '').filter(Boolean)),
-      };
-    }
-
-    return tryHashtagFallback(keyword);
-  } catch (err: any) {
-    console.warn(`[TikTok] Error: ${err.message?.slice(0, 80)}`);
-    return null;
+      if (!res.ok) continue;
+      const data = await res.json();
+      
+      const items = data?.data?.keyword_list || data?.data?.list || data?.data || [];
+      if (Array.isArray(items) && items.length > 0) {
+        const item = items[0];
+        return {
+          keyword,
+          viewCount: item.video_view_count || item.view_count || item.publish_cnt || 0,
+          videoCount: item.video_count || item.publish_cnt || 0,
+          growthRate: item.trend || item.growth_rate || item.value_change_rate || 0,
+          isHot: !!(item.is_hot || item.trend > 50),
+          relatedHashtags: (items.slice(1, 4).map((i: any) => i.keyword || i.hashtag_name || '').filter(Boolean)),
+        };
+      }
+    } catch {}
   }
+
+  // Try hashtag fallback with simplified keyword
+  for (const kw of variations) {
+    const result = await tryHashtagFallback(kw);
+    if (result) { result.keyword = keyword; return result; }
+  }
+
+  return null;
+}
+
+/**
+ * Generate simpler keyword variations for better API matches
+ */
+function getKeywordVariations(keyword: string): string[] {
+  const words = keyword.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const variations: string[] = [keyword];
+  
+  // Skip adjectives/modifiers that reduce matches
+  const skipWords = new Set(['biodegradable', 'sustainable', 'recycled', 'organic', 'premium', 'professional', 'portable', 'compact', 'lightweight', 'heavy', 'duty', 'multi', 'function', 'advanced', 'smart', 'digital', 'electric', 'waterproof', 'outdoor', 'indoor']);
+  
+  if (words.length > 2) {
+    // Try last 2 words (usually the core product)
+    const core = words.filter(w => !skipWords.has(w));
+    if (core.length >= 2) variations.push(core.slice(-2).join(' '));
+    if (core.length >= 1) variations.push(core[core.length - 1]);
+    // Try just 2 significant words
+    variations.push(words.slice(-2).join(' '));
+  }
+  
+  return [...new Set(variations)];
 }
 
 async function tryHashtagFallback(keyword: string): Promise<TikTokTrendData | null> {

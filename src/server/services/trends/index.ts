@@ -110,12 +110,25 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
     signals.push('⚠️ No external trend data available');
   }
 
-  // If only 1 source responded with good data, boost score (partial data penalty was too harsh)
+  // Compensate for partial data — real products often only show on 1-2 platforms
   if (sourcesResponded === 1 && score >= 55) {
-    score += 8; // Compensate for missing sources
+    score += 10;
+  } else if (sourcesResponded === 2 && score >= 60) {
+    score += 5;
   }
 
   score = Math.min(100, Math.max(0, score));
+
+  // Confidence = weighted — Amazon alone gives decent confidence for product research
+  // Google Trends daily-only API is limited; TikTok is niche-keyword-unfriendly
+  let confidence = 0;
+  if (google) confidence += 0.25;  // Google daily trends is limited data
+  if (tiktok) confidence += 0.35;  // TikTok is strong signal when available
+  if (amazon) confidence += 0.40;  // Amazon is the most reliable for product demand
+  confidence = Math.min(1, confidence);
+  
+  // Minimum confidence floor when at least one source responded
+  if (sourcesResponded > 0 && confidence < 0.4) confidence = 0.4;
 
   // Determine direction
   let trendDirection: AggregatedTrend['trendDirection'] = 'unknown';
@@ -132,7 +145,7 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
     tiktok,
     amazon,
     signals,
-    confidence: sourcesResponded / 3,
+    confidence,
   };
 }
 
