@@ -156,9 +156,9 @@ export function TrendsPage() {
                                 <Text as="h2" variant="headingMd">{trend.keyword}</Text>
                                 <InlineStack gap="200">
                                   <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 10, background: dir.bg, color: dir.color }}>{dir.icon} {dir.label}</span>
-                                  <Badge tone="info">Confidence: {(trend.confidence * 100).toFixed(0)}%</Badge>
-                                  {!trend.tiktok && <span style={{ fontSize: 10, color: '#9CA3AF' }}>TikTok: no match</span>}
-                                  {!trend.google && <span style={{ fontSize: 10, color: '#9CA3AF' }}>Google: no data</span>}
+                                  <Badge tone={trend.confidence >= 0.6 ? 'success' : trend.confidence >= 0.4 ? 'info' : 'attention'}>
+                                    {trend.confidence >= 0.75 ? 'High' : trend.confidence >= 0.5 ? 'Good' : trend.confidence >= 0.35 ? 'Fair' : 'Low'} confidence
+                                  </Badge>
                                 </InlineStack>
                               </BlockStack>
                             </InlineStack>

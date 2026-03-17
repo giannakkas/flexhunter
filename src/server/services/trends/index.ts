@@ -89,8 +89,13 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   if (amazon) {
     sourcesResponded++;
     if (amazon.demandSignal === 'high') {
-      score += 20;
+      score += 25;
       signals.push(`🛒 Amazon: High demand (${amazon.productCount}+ listings, avg $${amazon.avgPrice})`);
+      // Extra boost for very strong marketplace presence
+      if (amazon.productCount >= 40) {
+        score += 5;
+        signals.push(`💪 Amazon: Massive product selection — proven demand`);
+      }
     } else if (amazon.demandSignal === 'medium') {
       score += 12;
       signals.push(`🛒 Amazon: Moderate demand (${amazon.productCount} listings)`);
@@ -100,8 +105,11 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
     }
 
     if (amazon.avgRating >= 4.5) {
-      score += 5;
+      score += 8;
       signals.push(`⭐ Amazon: ${amazon.avgRating}★ avg rating — customers love it`);
+    } else if (amazon.avgRating >= 4.0) {
+      score += 4;
+      signals.push(`⭐ Amazon: ${amazon.avgRating}★ avg rating`);
     }
   }
 
@@ -112,7 +120,7 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
 
   // Compensate for partial data — real products often only show on 1-2 platforms
   if (sourcesResponded === 1 && score >= 55) {
-    score += 10;
+    score += 8;
   } else if (sourcesResponded === 2 && score >= 60) {
     score += 5;
   }

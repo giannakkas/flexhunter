@@ -31,6 +31,7 @@ export async function getTikTokTrends(keyword: string): Promise<TikTokTrendData 
 
   // Try multiple keyword variations (compound keywords rarely match TikTok's data)
   const variations = getKeywordVariations(keyword);
+  console.log(`[TikTok] Searching for "${keyword}" with variations:`, variations);
   
   for (const kw of variations) {
     try {
@@ -39,10 +40,11 @@ export async function getTikTokTrends(keyword: string): Promise<TikTokTrendData 
         { headers: headers(), signal: AbortSignal.timeout(8000) }
       );
 
-      if (!res.ok) continue;
+      if (!res.ok) { console.log(`[TikTok] keyword "${kw}" → ${res.status}`); continue; }
       const data = await res.json();
       
       const items = data?.data?.keyword_list || data?.data?.list || data?.data || [];
+      console.log(`[TikTok] keyword "${kw}" → ${items.length} results`);
       if (Array.isArray(items) && items.length > 0) {
         const item = items[0];
         return {
@@ -76,14 +78,20 @@ function getKeywordVariations(keyword: string): string[] {
   // Skip adjectives/modifiers that reduce matches
   const skipWords = new Set(['biodegradable', 'sustainable', 'recycled', 'organic', 'premium', 'professional', 'portable', 'compact', 'lightweight', 'heavy', 'duty', 'multi', 'function', 'advanced', 'smart', 'digital', 'electric', 'waterproof', 'outdoor', 'indoor']);
   
-  if (words.length > 2) {
-    // Try last 2 words (usually the core product)
-    const core = words.filter(w => !skipWords.has(w));
+  const core = words.filter(w => !skipWords.has(w));
+  
+  if (words.length >= 3) {
     if (core.length >= 2) variations.push(core.slice(-2).join(' '));
     if (core.length >= 1) variations.push(core[core.length - 1]);
-    // Try just 2 significant words
     variations.push(words.slice(-2).join(' '));
+  } else if (words.length === 2 && core.length >= 1) {
+    // For 2-word keywords, try each word individually
+    variations.push(core[core.length - 1]);
   }
+  
+  // Add hashtag-style (no spaces) — TikTok hashtags are single words
+  if (core.length >= 2) variations.push(core.join(''));
+  if (words.length >= 2) variations.push(words.join(''));
   
   return [...new Set(variations)];
 }
