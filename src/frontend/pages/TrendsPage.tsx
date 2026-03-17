@@ -107,7 +107,7 @@ export function TrendsPage() {
           <button style={tabBtnStyle(tab === 0)} onClick={() => setTab(0)}>
             🔍 Trend Analysis
           </button>
-          <button style={tabBtnStyle(tab === 1)} onClick={() => setTab(1)}>
+          <button style={tabBtnStyle(tab === 1)} onClick={() => { setTab(1); loadViralProducts(); }}>
             🔥 Early Viral Products ({viralProducts.length})
           </button>
         </div>
