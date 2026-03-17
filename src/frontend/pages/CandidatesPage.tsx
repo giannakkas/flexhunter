@@ -235,12 +235,19 @@ export function CandidatesPage() {
   const [researchProgress, setResearchProgress] = useState(0);
   const [researchStage, setResearchStage] = useState('');
   const pollingActive = React.useRef(false);
+  const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Only load candidates when NOT researching
   useEffect(() => { if (!researchRunning) get('/candidates?status=CANDIDATE&sort=score'); }, [get, researchRunning]);
 
+  const stopPolling = () => {
+    pollingActive.current = false;
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
+
   const startPolling = (fromProgress: number) => {
     if (pollingActive.current) return;
+    stopPolling(); // clear any leftover timer
     pollingActive.current = true;
     setResearchRunning(true);
 
@@ -258,7 +265,7 @@ export function CandidatesPage() {
     ];
 
     // Progress caps at 90% — jumps to 100% only when server confirms done
-    const timer = setInterval(() => {
+    timerRef.current = setInterval(() => {
       tick++;
       if (prog < 90) prog = Math.min(90, prog + Math.random() * 0.25 + 0.05);
       setResearchProgress(prog);
@@ -268,14 +275,13 @@ export function CandidatesPage() {
     (async () => {
       for (let i = 0; i < 200; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        if (!pollingActive.current) { clearInterval(timer); return; }
+        if (!pollingActive.current) return;
         try {
           const s = await apiFetch<any>('/research/status');
           const j = s?.data;
           if (!j) continue;
           if (j.status === 'COMPLETED') {
-            clearInterval(timer);
-            pollingActive.current = false;
+            stopPolling();
             setResearchProgress(100);
             setResearchStage(`✅ Found ${(j.result as any)?.totalSaved || 0} products!`);
             await get('/candidates?status=CANDIDATE&sort=score');
@@ -283,8 +289,7 @@ export function CandidatesPage() {
             return;
           }
           if (j.status === 'FAILED') {
-            clearInterval(timer);
-            pollingActive.current = false;
+            stopPolling();
             await get('/candidates?status=CANDIDATE&sort=score');
             setResearchRunning(false);
             setMsg(friendlyError(j.error || 'Research failed'));
@@ -292,8 +297,7 @@ export function CandidatesPage() {
           }
         } catch {}
       }
-      clearInterval(timer);
-      pollingActive.current = false;
+      stopPolling();
       await get('/candidates?status=CANDIDATE&sort=score');
       setResearchRunning(false);
       setMsg('Research timed out. Products found so far are shown.');
@@ -309,18 +313,17 @@ export function CandidatesPage() {
           const created = new Date(job.createdAt).getTime();
           const ageMs = Date.now() - created;
           if (ageMs < 5 * 60 * 1000) {
-            // Estimate progress from age: ~5 min total, cap at 85%
             const estimatedProg = Math.min(85, Math.round((ageMs / (5 * 60 * 1000)) * 90));
             startPolling(Math.max(10, estimatedProg));
           }
         }
       } catch {}
     })();
-    return () => { pollingActive.current = false; };
+    return () => { stopPolling(); };
   }, []); // eslint-disable-line
 
   const handleResearch = async () => {
-    pollingActive.current = false;
+    stopPolling();
     setData([]);
     setResearchRunning(true);
     setResearchProgress(2);
