@@ -86,10 +86,10 @@ export function ImportsPage() {
                   background: 'white', borderRadius: 12, overflow: 'hidden',
                   border: item.status === 'WINNER' ? '2px solid #10B981' : item.status === 'WEAK' ? '2px solid #EF4444' : '1px solid #E5E7EB',
                   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
-                  transition: 'transform 0.15s ease, box-shadow 0.15s ease',
+                  display: 'flex', flexDirection: 'column',
                 }}>
                   {/* Image */}
-                  <div style={{ position: 'relative', height: 180, background: '#F9FAFB', overflow: 'hidden' }}>
+                  <div style={{ position: 'relative', height: 180, background: '#F9FAFB', overflow: 'hidden', flexShrink: 0 }}>
                     <img src={imgUrl} alt={item.importedTitle}
                       style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                       onError={(e: any) => { e.target.src = 'https://cdn.shopify.com/s/files/1/0533/2089/files/placeholder-images-image_large.png'; }}
@@ -114,53 +114,62 @@ export function ImportsPage() {
                     </div>
                   </div>
 
-                  {/* Content */}
-                  <div style={{ padding: 14 }}>
-                    <BlockStack gap="200">
-                      <Text as="h3" variant="bodyMd" fontWeight="bold">
-                        {(item.importedTitle || '').slice(0, 60)}{item.importedTitle?.length > 60 ? '...' : ''}
-                      </Text>
+                  {/* Content — grows to fill space */}
+                  <div style={{ padding: 14, display: 'flex', flexDirection: 'column', flex: 1 }}>
+                    <div style={{ flex: 1 }}>
+                      <BlockStack gap="200">
+                        <Text as="h3" variant="bodyMd" fontWeight="bold">
+                          {(item.importedTitle || '').slice(0, 60)}{item.importedTitle?.length > 60 ? '...' : ''}
+                        </Text>
 
-                      {/* Metrics row */}
-                      {cost > 0 && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7280' }}>
-                          <span>Cost: <b style={{ color: '#374151' }}>${cost.toFixed(2)}</b></span>
-                          <span>Profit: <b style={{ color: profit > 10 ? '#059669' : '#D97706' }}>${profit.toFixed(2)}</b></span>
-                          <span>Margin: <b style={{ color: margin > 50 ? '#059669' : '#D97706' }}>{margin.toFixed(0)}%</b></span>
-                        </div>
-                      )}
-
-                      {/* Health bar */}
-                      {perf && (
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
-                            <span style={{ color: '#6B7280' }}>Health Score</span>
-                            <span style={{ fontWeight: 700, color: perf.healthScore >= 60 ? '#059669' : perf.healthScore >= 30 ? '#D97706' : '#DC2626' }}>{perf.healthScore}/100</span>
+                        {/* Metrics row */}
+                        {cost > 0 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#6B7280' }}>
+                            <span>Cost: <b style={{ color: '#374151' }}>${cost.toFixed(2)}</b></span>
+                            <span>Profit: <b style={{ color: profit > 10 ? '#059669' : '#D97706' }}>${profit.toFixed(2)}</b></span>
+                            <span>Margin: <b style={{ color: margin > 50 ? '#059669' : '#D97706' }}>{margin.toFixed(0)}%</b></span>
                           </div>
-                          <div style={{ height: 6, borderRadius: 3, background: '#E5E7EB', overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%', borderRadius: 3, width: `${perf.healthScore}%`,
-                              background: perf.healthScore >= 60 ? '#10B981' : perf.healthScore >= 30 ? '#F59E0B' : '#EF4444',
-                            }} />
+                        )}
+
+                        {/* Health bar */}
+                        {perf && (
+                          <div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, marginBottom: 4 }}>
+                              <span style={{ color: '#6B7280' }}>Health Score</span>
+                              <span style={{ fontWeight: 700, color: perf.healthScore >= 60 ? '#059669' : perf.healthScore >= 30 ? '#D97706' : '#DC2626' }}>{perf.healthScore}/100</span>
+                            </div>
+                            <div style={{ height: 6, borderRadius: 3, background: '#E5E7EB', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%', borderRadius: 3, width: `${perf.healthScore}%`,
+                                background: perf.healthScore >= 60 ? '#10B981' : perf.healthScore >= 30 ? '#F59E0B' : '#EF4444',
+                              }} />
+                            </div>
                           </div>
+                        )}
+
+                        {/* Shopify status */}
+                        <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+                          {item.shopifyStatus === 'MOCK' ? '⚠️ Not in Shopify — mock import' : item.shopifyHandle ? `/${item.shopifyHandle}` : 'In Shopify'}
                         </div>
-                      )}
+                      </BlockStack>
+                    </div>
 
-                      {/* Shopify status */}
-                      <div style={{ fontSize: 11, color: '#9CA3AF' }}>
-                        {item.shopifyStatus === 'MOCK' ? '⚠️ Not in Shopify — mock import' : item.shopifyHandle ? `/${item.shopifyHandle}` : 'In Shopify'}
-                      </div>
-
-                      {/* Actions */}
-                      <InlineStack gap="200">
-                        <Button size="slim" variant="primary" onClick={() => navigate(`/seo?product=${item.id}`)}>SEO</Button>
-                        {item.isPinned
-                          ? <Button size="slim" onClick={() => handleUnpin(item.id)}>Unpin</Button>
-                          : <Button size="slim" onClick={() => handlePin(item.id)}>Pin</Button>
-                        }
-                        <Button size="slim" tone="critical" onClick={() => setDeleteTarget(item.id)}>Delete</Button>
-                      </InlineStack>
-                    </BlockStack>
+                    {/* Actions — pinned to bottom */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid #E5E7EB' }}>
+                      <button onClick={() => navigate(`/seo?product=${item.id}`)} style={{
+                        flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 700, borderRadius: 6,
+                        border: '1px solid #5C6AC4', background: 'linear-gradient(135deg, #007ACE, #5C6AC4)',
+                        color: 'white', cursor: 'pointer',
+                      }}>SEO</button>
+                      <button onClick={() => item.isPinned ? handleUnpin(item.id) : handlePin(item.id)} style={{
+                        flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        border: '1px solid #D1D5DB', background: 'white', color: '#374151', cursor: 'pointer',
+                      }}>{item.isPinned ? 'Unpin' : 'Pin'}</button>
+                      <button onClick={() => setDeleteTarget(item.id)} style={{
+                        flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 600, borderRadius: 6,
+                        border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer',
+                      }}>Delete</button>
+                    </div>
                   </div>
                 </div>
               );
