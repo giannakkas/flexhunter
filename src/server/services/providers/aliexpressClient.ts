@@ -96,9 +96,15 @@ export async function searchAliExpressProducts(params: AESearchParams): Promise<
     let productUrl = item.itemUrl || item.productUrl || '';
     if (productUrl.startsWith('//')) productUrl = `https:${productUrl}`;
 
-    // NOTE: API prices are promotional/wholesale — actual cost may be 1.5-2x higher
-    // We show the API price as cost but add a warning in the UI
-    const suggestedPrice = price > 0 ? Math.round(price * 2.2 * 100) / 100 : 0;
+    // Dynamic markup based on cost tier (realistic dropshipping margins)
+    // Low-cost items can sustain higher markups, expensive items need lower
+    let markup = 2.5;
+    if (price > 50) markup = 1.8;
+    else if (price > 30) markup = 2.0;
+    else if (price > 15) markup = 2.3;
+    else if (price > 5) markup = 2.8;
+    else if (price > 0) markup = 3.5; // Very cheap items need high markup to cover ad spend
+    const suggestedPrice = price > 0 ? Math.round(price * markup * 100) / 100 : 0;
 
     products.push({
       providerType: 'ALIEXPRESS',

@@ -47,29 +47,34 @@ export async function batchAIScore(
   const storeDesc = dna.description || settings.storeDescription || 'dropshipping store';
 
   const productSummaries = products.map((p, i) => {
-    return `${i}. "${p.title.slice(0, 60)}" | $${p.suggestedPrice || '?'} cost:$${p.costPrice || '?'} | ${p.orderVolume || 0} orders | ${p.reviewRating || 0}★`;
+    const margin = p.suggestedPrice && p.costPrice ? ((p.suggestedPrice - p.costPrice) / p.suggestedPrice * 100).toFixed(0) : '?';
+    const ratingStr = p.reviewRating ? `${p.reviewRating}★` : 'no rating';
+    return `${i}. "${p.title.slice(0, 60)}" | sell:$${p.suggestedPrice || '?'} cost:$${p.costPrice || '?'} margin:${margin}% | ${p.orderVolume || 0} orders | ${ratingStr} | ships:${p.shippingDays || '?'}d from ${p.warehouseCountry || '?'}`;
   }).join('\n');
 
-  const prompt = `Score ${products.length} products for a "${storeDesc}" store. Price range: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}.
+  const prompt = `You are a dropshipping product analyst. Score ${products.length} products for a "${storeDesc}" store.
+Target customers: ${settings.targetAudience?.join(', ') || 'general'}
+Price range: $${settings.priceRangeMin || 5}-$${settings.priceRangeMax || 100}
 
 ${productSummaries}
 
-For each product return: storeFit(0-100), saturation(0-100), viralScore(0-100), trendStage, winnerScore(0-100), storeFitReason(short), viralReason(short), problemSolving(bool), wowFactor(bool), adFriendly(bool), giftWorthy(bool), impulsePrice(bool).
+EVALUATE EACH PRODUCT HONESTLY:
+1. storeFit (0-100): Would a customer EXPECT this in a "${storeDesc}" store? Be STRICT — wrong niche = 0-30.
+2. saturation (0-100): Market opportunity. 90+ = untapped niche, 50 = moderate competition, <30 = oversaturated.
+3. viralScore (0-100): Could this go viral on TikTok/Instagram? Visual, shareable, wow-factor, problem-solving.
+4. trendStage: early_acceleration | breakout_candidate | rising_trend | stable_trend | saturated
+5. winnerScore (0-100): Overall — would YOU invest money advertising this product?
 
-SCORING GUIDE — USE THE FULL RANGE:
-- winnerScore 90-100: Perfect dropshipping product — high demand, great margins, fits this store perfectly
-- winnerScore 80-89: Strong winner — most signals are positive, worth importing
-- winnerScore 70-79: Decent product — some positive signals but not a clear winner
-- winnerScore 50-69: Mediocre — average product, nothing special
-- winnerScore 0-49: Bad fit — wrong niche, poor margins, or saturated
+CRITICAL RULES:
+- DIFFERENTIATE clearly. Not every product is a winner. Spread scores across the full 0-100 range.
+- A true winner (good niche fit + proven demand + good margins + viral appeal) should score 85-95.
+- Average products should score 55-70.
+- Poor fits, saturated products, or low-margin items should score 20-50.
+- Products with 0 reviews or 0 orders are UNPROVEN — cap winnerScore at 70 max.
+- Products over $80 sell price are HARDER to sell via ads — penalize winnerScore.
 
-Products that match the store niche, have good margins (>40%), are under $50, and are visual/shareable SHOULD score 85+.
-Be GENEROUS with winnerScore for genuinely good products. Don't default everything to 60-75.
-
-trendStage options: early_acceleration, breakout_candidate, rising_trend, stable_trend, saturated.
-
-Return ONLY a JSON array of ${products.length} objects:
-[{"storeFit":85,"saturation":70,"viralScore":78,"trendStage":"rising_trend","winnerScore":82,"storeFitReason":"perfect for outdoor niche","viralReason":"shareable survival content","problemSolving":true,"wowFactor":true,"adFriendly":true,"giftWorthy":true,"impulsePrice":true}]`;
+Return a JSON array of ${products.length} objects:
+[{"storeFit":number,"saturation":number,"viralScore":number,"trendStage":"string","winnerScore":number,"storeFitReason":"1 sentence","viralReason":"1 sentence","problemSolving":bool,"wowFactor":bool,"adFriendly":bool,"giftWorthy":bool,"impulsePrice":bool}]`;
 
   // Try up to 2 times
   for (let attempt = 1; attempt <= 2; attempt++) {
@@ -158,8 +163,8 @@ export async function runBatchMultiAgentScoring(
       explanation: ai?.viralReason || `${ai?.trendStage || 'stable'} — ${ai ? 'AI scored' : 'algorithmic only'}`,
     };
 
-    // Final score: 60% AI winnerScore + 40% weighted dimensions
-    const aiWinner = Math.min(100, Math.max(0, ai?.winnerScore || 50));
+    // Final score: 55% AI assessment + 45% algorithmic dimensions
+    const aiWinner = Math.min(100, Math.max(0, ai?.winnerScore || 40));
     const dimensionScore = Math.round(
       storeFit.score * 0.25 +
       profit.score * 0.15 +
@@ -169,16 +174,35 @@ export async function runBatchMultiAgentScoring(
       supplier.score * 0.15
     );
     
-    let finalScore = Math.round(aiWinner * 0.60 + dimensionScore * 0.40);
+    let finalScore = Math.round(aiWinner * 0.55 + dimensionScore * 0.45);
 
-    // Bonus points for exceptional products
-    if (storeFit.score >= 80 && profit.score >= 70) finalScore += 3;
-    if (aiWinner >= 85) finalScore += 2;
-    if (viral.viralScore >= 75) finalScore += 2;
-    if (product.orderVolume && product.orderVolume > 1000) finalScore += 2;
-    if (product.reviewRating && product.reviewRating >= 4.5) finalScore += 1;
+    // ── REAL SIGNAL BONUSES (only for products with actual evidence) ──
+    // Proven demand — orders don't lie
+    if (product.orderVolume && product.orderVolume > 10000) finalScore += 4;
+    else if (product.orderVolume && product.orderVolume > 3000) finalScore += 3;
+    else if (product.orderVolume && product.orderVolume > 500) finalScore += 1;
 
-    finalScore = Math.min(99, Math.max(0, finalScore));
+    // Verified quality — real reviews
+    if (product.reviewRating && product.reviewRating >= 4.7 && product.reviewCount && product.reviewCount > 500) finalScore += 3;
+    else if (product.reviewRating && product.reviewRating >= 4.5 && product.reviewCount && product.reviewCount > 100) finalScore += 2;
+
+    // Strong niche fit + good margins = winning combination
+    if (storeFit.score >= 80 && profit.score >= 75) finalScore += 3;
+
+    // Viral potential confirmed by AI
+    if (ai?.wowFactor && ai?.adFriendly && ai?.problemSolving) finalScore += 2;
+
+    // ── REAL SIGNAL PENALTIES ──
+    // Unproven products — no track record
+    if (!product.orderVolume || product.orderVolume < 50) finalScore -= 5;
+    // No review data — uncertain quality
+    if (!product.reviewRating || product.reviewRating === 0) finalScore -= 3;
+    // Expensive products — harder to sell via ads
+    if (product.suggestedPrice && product.suggestedPrice > 100) finalScore -= 3;
+    // Very slow shipping
+    if (product.shippingDays && product.shippingDays > 20) finalScore -= 3;
+
+    finalScore = Math.min(99, Math.max(15, finalScore));
 
     let recommendation: MultiAgentScore['recommendation'];
     if (storeFit.score < 30) recommendation = 'avoid';

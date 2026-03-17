@@ -107,16 +107,23 @@ export async function searchCJProducts(params: CJSearchParams): Promise<Normaliz
         imageUrls: [p.bigImage].filter(Boolean),
         variants: [],
         costPrice: parseFloat(p.sellPrice || p.nowPrice || '0'),
-        suggestedPrice: parseFloat(p.sellPrice || '0') * 2.2, // 2.2x markup
+        suggestedPrice: (() => {
+          const cost = parseFloat(p.sellPrice || '0');
+          if (cost > 50) return Math.round(cost * 1.8 * 100) / 100;
+          if (cost > 30) return Math.round(cost * 2.0 * 100) / 100;
+          if (cost > 15) return Math.round(cost * 2.3 * 100) / 100;
+          if (cost > 5) return Math.round(cost * 2.8 * 100) / 100;
+          return Math.round(cost * 3.5 * 100) / 100;
+        })(),
         currency: 'USD',
         shippingCost: 0,
         shippingDays: p.deliveryCycle ? parseInt(p.deliveryCycle) * 24 : 10,
         shippingSpeed: 'STANDARD',
         warehouseCountry: p.countryCode || 'CN',
         reviewCount: p.listedNum || 0,
-        reviewRating: 4.5, // CJ doesn't return ratings in search
+        reviewRating: 0, // CJ doesn't provide ratings — scored as unknown
         orderVolume: p.listedNum || 0,
-        supplierRating: 4.7,
+        supplierRating: 0, // No rating data from CJ search API
         sourceUrl: `https://cjdropshipping.com/product/${p.id || p.sku}`,
         sourceName: 'CJ Dropshipping',
       });

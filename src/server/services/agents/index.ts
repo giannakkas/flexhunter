@@ -83,30 +83,34 @@ export async function profitAgent(product: NormalizedProduct): Promise<AgentResu
   let score = 0;
   const signals: string[] = [];
 
-  // If no price data available, give a moderate default score (don't penalize)
   if (cost <= 0 && price <= 0) {
-    return {
-      score: 55,
-      confidence: 0.3,
-      reasoning: 'Price data unavailable — moderate default score',
-      signals: ['Price data not provided by supplier'],
-    };
+    return { score: 40, confidence: 0.2, reasoning: 'No price data available', signals: ['Price unknown'] };
   }
 
-  if (margin >= 70) { score = 95; signals.push('Excellent margin >70%'); }
-  else if (margin >= 60) { score = 85; signals.push('Strong margin >60%'); }
-  else if (margin >= 50) { score = 75; signals.push('Good margin >50%'); }
-  else if (margin >= 40) { score = 60; signals.push('Decent margin >40%'); }
-  else if (margin >= 30) { score = 40; signals.push('Thin margin 30-40%'); }
-  else { score = 20; signals.push('Very low margin <30%'); }
+  // Margin scoring
+  if (margin >= 70) { score = 92; signals.push('Excellent margin >70%'); }
+  else if (margin >= 60) { score = 80; signals.push('Strong margin >60%'); }
+  else if (margin >= 50) { score = 68; signals.push('Good margin >50%'); }
+  else if (margin >= 40) { score = 52; signals.push('Decent margin >40%'); }
+  else if (margin >= 30) { score = 35; signals.push('Thin margin 30-40%'); }
+  else { score = 18; signals.push('Very low margin <30%'); }
 
-  if (profit > 20) { score += 5; signals.push(`$${profit.toFixed(0)} profit per unit`); }
-  if (cost < 15) signals.push('Low cost base');
-  if (shipping === 0) signals.push('Free shipping from supplier');
+  // Profit per unit — critical for ad-driven dropshipping
+  if (profit >= 30) { score += 8; signals.push(`$${profit.toFixed(0)} profit per unit`); }
+  else if (profit >= 15) { score += 4; signals.push(`$${profit.toFixed(0)} profit per unit`); }
+  else if (profit >= 8) { signals.push(`$${profit.toFixed(0)} profit — tight for paid ads`); }
+  else if (profit > 0) { score -= 5; signals.push(`Only $${profit.toFixed(0)} profit — may not cover ad spend`); }
+
+  // Impulse price range ($15-$45 = sweet spot for paid social ads)
+  if (price >= 15 && price <= 45) { score += 5; signals.push('Impulse-buy price range ($15-45)'); }
+  else if (price > 100) { score -= 5; signals.push('High price — harder to sell via ads'); }
+
+  // Low cost = room for discounts and bundles
+  if (cost < 10 && cost > 0) { score += 3; signals.push('Low cost base — room for bundles'); }
 
   return {
-    score: Math.min(100, score),
-    confidence: 0.9,
+    score: Math.min(100, Math.max(0, score)),
+    confidence: cost > 0 ? 0.85 : 0.3,
     reasoning: `${margin.toFixed(0)}% margin, $${profit.toFixed(2)} profit per sale`,
     signals,
   };
@@ -119,25 +123,32 @@ export async function trendAgent(product: NormalizedProduct): Promise<AgentResul
   const reviews = product.reviewCount || 0;
   const rating = product.reviewRating || 0;
 
-  let score = 40; // baseline
+  let score = 30; // lower baseline
   const signals: string[] = [];
 
-  // Order volume signals
-  if (orders > 50000) { score += 30; signals.push(`${(orders/1000).toFixed(0)}K orders — proven seller`); }
-  else if (orders > 10000) { score += 25; signals.push(`${(orders/1000).toFixed(0)}K orders — strong demand`); }
-  else if (orders > 1000) { score += 15; signals.push(`${orders.toLocaleString()} orders — growing`); }
+  // Order volume — the most honest demand signal
+  if (orders > 50000) { score += 35; signals.push(`${(orders/1000).toFixed(0)}K orders — proven bestseller`); }
+  else if (orders > 10000) { score += 28; signals.push(`${(orders/1000).toFixed(0)}K orders — high demand`); }
+  else if (orders > 3000) { score += 20; signals.push(`${(orders/1000).toFixed(1)}K orders — strong demand`); }
+  else if (orders > 500) { score += 12; signals.push(`${orders} orders — growing demand`); }
   else if (orders > 100) { score += 5; signals.push(`${orders} orders — early stage`); }
-  else { signals.push('Low order volume'); }
+  else { score -= 5; signals.push('Low order volume — unproven'); }
 
-  // Review signals
-  if (rating >= 4.5 && reviews > 500) { score += 15; signals.push(`${rating}★ with ${reviews.toLocaleString()} reviews`); }
-  else if (rating >= 4.0) { score += 8; signals.push(`${rating}★ rating`); }
-  else if (rating < 3.5) { score -= 10; signals.push('Low rating — quality risk'); }
+  // Review signals — only score if data exists
+  if (rating > 0) {
+    if (rating >= 4.7 && reviews > 500) { score += 18; signals.push(`${rating}★ with ${reviews.toLocaleString()} reviews — excellent`); }
+    else if (rating >= 4.5 && reviews > 100) { score += 12; signals.push(`${rating}★ (${reviews} reviews)`); }
+    else if (rating >= 4.0) { score += 6; signals.push(`${rating}★ rating`); }
+    else if (rating < 3.5) { score -= 12; signals.push('Low rating — quality risk'); }
+  } else {
+    // No rating data — neutral, don't inflate or penalize
+    signals.push('No review data available');
+  }
 
   return {
     score: Math.min(100, Math.max(0, score)),
-    confidence: orders > 100 ? 0.8 : 0.4,
-    reasoning: `${orders.toLocaleString()} orders, ${rating}★ rating`,
+    confidence: orders > 500 ? 0.8 : rating > 0 ? 0.5 : 0.3,
+    reasoning: `${orders.toLocaleString()} orders${rating > 0 ? `, ${rating}★` : ''}`,
     signals,
   };
 }
@@ -177,27 +188,31 @@ Return JSON: {"score": number, "confidence": number 0-1, "reasoning": "1 sentenc
 // ── Supplier Quality Agent ──────────────────────
 
 export function supplierQualityAgent(product: NormalizedProduct): AgentResult {
-  let score = 50;
+  let score = 40; // lower baseline — must earn points
   const signals: string[] = [];
 
-  // Shipping speed
+  // Shipping speed — critical for customer satisfaction
   const days = product.shippingDays || 15;
-  if (days <= 5) { score += 25; signals.push(`${days}-day shipping — excellent`); }
-  else if (days <= 8) { score += 15; signals.push(`${days}-day shipping — good`); }
-  else if (days <= 12) { score += 5; signals.push(`${days}-day shipping — acceptable`); }
-  else { score -= 10; signals.push(`${days}-day shipping — slow`); }
+  if (days <= 5) { score += 30; signals.push(`${days}-day shipping — excellent`); }
+  else if (days <= 8) { score += 18; signals.push(`${days}-day shipping — good`); }
+  else if (days <= 12) { score += 8; signals.push(`${days}-day shipping — acceptable`); }
+  else if (days <= 20) { score -= 5; signals.push(`${days}-day shipping — slow`); }
+  else { score -= 15; signals.push(`${days}-day shipping — very slow`); }
 
-  // Warehouse
+  // Warehouse location
   if (product.warehouseCountry === 'US' || product.warehouseCountry === 'EU') {
     score += 15;
     signals.push(`${product.warehouseCountry} warehouse — fast local delivery`);
+  } else if (product.warehouseCountry === 'CN') {
+    signals.push('Ships from China');
   }
 
-  // Supplier rating
+  // Supplier rating — only score if we have real data
   const sr = product.supplierRating || 0;
-  if (sr >= 4.7) { score += 10; signals.push(`${sr} supplier rating`); }
-  else if (sr >= 4.0) { score += 5; }
-  else if (sr < 3.5 && sr > 0) { score -= 15; signals.push('Low supplier rating — risk'); }
+  if (sr >= 4.7) { score += 12; signals.push(`${sr}★ supplier rating — excellent`); }
+  else if (sr >= 4.0) { score += 6; signals.push(`${sr}★ supplier rating`); }
+  else if (sr > 0 && sr < 3.5) { score -= 15; signals.push('Low supplier rating — risk'); }
+  else { signals.push('Supplier rating unknown'); }
 
   // Express shipping
   if (product.shippingSpeed === 'EXPRESS') {
