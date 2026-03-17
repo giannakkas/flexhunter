@@ -24,7 +24,7 @@ function ScoreCircle({ value, size = 34 }: { value: number; size?: number }) {
 
 export function SelectionsPage() {
   const navigate = useNavigate();
-  const { data: candidates, get, loading } = useApi<any[]>();
+  const { data: candidates, get, loading, setData } = useApi<any[]>();
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -43,7 +43,7 @@ export function SelectionsPage() {
   useEffect(() => { get('/candidates?status=APPROVED&sort=score'); }, [get]);
   useEffect(() => { if (msg) { const t = setTimeout(() => setMsg(null), 5000); return () => clearTimeout(t); } }, [msg]);
 
-  const items = candidates || [];
+  const items = (candidates || []).filter((i: any) => !i.importedProduct);
 
   // Open pre-import editor
   const openEditModal = (item: any) => {
@@ -56,10 +56,11 @@ export function SelectionsPage() {
   // Confirm import with edits
   const confirmImport = async () => {
     if (!editItem) return;
-    setBusy(editItem.id);
+    const importingId = editItem.id;
+    setBusy(importingId);
     setEditItem(null);
     try {
-      const r = await apiFetch<any>(`/candidates/${editItem.id}/approve`, {
+      const r = await apiFetch<any>(`/candidates/${importingId}/approve`, {
         method: 'POST',
         body: JSON.stringify({
           customTitle: editTitle || undefined,
@@ -70,8 +71,7 @@ export function SelectionsPage() {
       if (r.shopifyError) {
         setMsg(`Warning: ${r.shopifyError}`);
       } else if (r.importedProductId) {
-        // Show SEO CTA
-        setSeoModal({ open: true, importedId: r.importedProductId, title: editTitle || editItem.title });
+        setSeoModal({ open: true, importedId: r.importedProductId, title: editTitle || '' });
       } else {
         setMsg(r.message || 'Imported!');
       }
@@ -79,31 +79,36 @@ export function SelectionsPage() {
       setMsg(friendlyError(e.message));
     }
     setBusy(null);
-    get('/candidates?status=APPROVED&sort=score');
+    // Remove imported item from UI immediately
+    setData((candidates || []).filter((i: any) => i.id !== importingId));
   };
 
   const importAll = async () => {
     let lastImportedId = '';
     let count = 0;
     for (const item of items) {
-      if (!item.importedProduct) {
-        try {
-          const r = await apiFetch<any>(`/candidates/${item.id}/approve`, { method: 'POST' });
-          if (r.importedProductId) lastImportedId = r.importedProductId;
-          count++;
-        } catch {}
-      }
+      try {
+        const r = await apiFetch<any>(`/candidates/${item.id}/approve`, { method: 'POST' });
+        if (r.importedProductId) lastImportedId = r.importedProductId;
+        count++;
+      } catch {}
     }
-    setMsg(`Imported ${count} products to Shopify!`);
-    get('/candidates?status=APPROVED&sort=score');
+    setMsg(`Imported ${count} products!`);
+    setData([]); // Clear all from UI
     if (lastImportedId) {
       setTimeout(() => setSeoModal({ open: true, importedId: lastImportedId, title: `${count} products` }), 500);
     }
   };
 
   const unselect = async (id: string) => {
-    await apiFetch(`/candidates/${id}/unselect`, { method: 'POST' }).catch(() => {});
-    get('/candidates?status=APPROVED&sort=score');
+    // Remove from UI immediately
+    setData((items || []).filter((i: any) => i.id !== id));
+    try {
+      await apiFetch(`/candidates/${id}/unselect`, { method: 'POST' });
+    } catch {
+      // Reload if API failed
+      get('/candidates?status=APPROVED&sort=score');
+    }
   };
 
   const profit = (i: any) => i.costPrice && i.suggestedPrice ? i.suggestedPrice - i.costPrice : null;

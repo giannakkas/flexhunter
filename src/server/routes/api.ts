@@ -705,10 +705,10 @@ router.post('/candidates/:id/approve', importRateLimit, async (req: Request, res
       },
     });
 
-    // Update candidate status
+    // Update candidate status — remove from Candidates page
     await prisma.candidateProduct.update({
       where: { id },
-      data: { status: 'APPROVED' },
+      data: { status: 'ARCHIVED' },
     });
 
     // Audit
