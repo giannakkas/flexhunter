@@ -144,6 +144,81 @@ function ScorePanel({ item, onClose }: { item: any; onClose: () => void }) {
   );
 }
 
+// ── Animated Research Activity Feed ──
+const ACTIVITY_MESSAGES = [
+  '🎯 Found a potential winning product...',
+  '📊 Analyzing profit margins and pricing...',
+  '🔍 Checking competition saturation levels...',
+  '🚀 Detected high-demand product signal...',
+  '💎 Evaluating product-market fit...',
+  '📈 Trend acceleration detected...',
+  '🏆 Scoring product against store DNA...',
+  '🌍 Verifying supplier shipping speed...',
+  '⚡ High viral potential identified...',
+  '🔬 Running deep niche analysis...',
+  '💰 Calculating ROI and ad potential...',
+  '🎁 Checking gift-worthiness score...',
+  '📦 Validating warehouse locations...',
+  '✨ Strong Buy candidate identified...',
+];
+
+function ResearchActivityFeed({ running }: { running: boolean }) {
+  const [messages, setMessages] = useState<{ id: number; text: string; opacity: number }[]>([]);
+  const counterRef = React.useRef(0);
+
+  useEffect(() => {
+    if (!running) { setMessages([]); return; }
+    
+    const interval = setInterval(() => {
+      const msg = ACTIVITY_MESSAGES[Math.floor(Math.random() * ACTIVITY_MESSAGES.length)];
+      const id = counterRef.current++;
+      setMessages(prev => [...prev.slice(-2), { id, text: msg, opacity: 1 }]);
+      
+      // Fade out after 3 seconds
+      setTimeout(() => {
+        setMessages(prev => prev.map(m => m.id === id ? { ...m, opacity: 0 } : m));
+      }, 3000);
+      
+      // Remove after fade
+      setTimeout(() => {
+        setMessages(prev => prev.filter(m => m.id !== id));
+      }, 3800);
+    }, 4000);
+
+    // Show first message immediately
+    const firstMsg = ACTIVITY_MESSAGES[0];
+    const firstId = counterRef.current++;
+    setMessages([{ id: firstId, text: firstMsg, opacity: 1 }]);
+    setTimeout(() => setMessages(prev => prev.map(m => m.id === firstId ? { ...m, opacity: 0 } : m)), 3000);
+
+    return () => clearInterval(interval);
+  }, [running]);
+
+  if (!running || messages.length === 0) return null;
+
+  return (
+    <div style={{ minHeight: 32, overflow: 'hidden' }}>
+      {messages.map(m => (
+        <div key={m.id} style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '4px 12px',
+          fontSize: 12, color: '#5C6AC4', fontWeight: 500,
+          opacity: m.opacity,
+          transition: 'opacity 0.8s ease',
+          transform: m.opacity === 1 ? 'translateY(0)' : 'translateY(-4px)',
+        }}>
+          <span style={{ 
+            width: 5, height: 5, borderRadius: '50%', 
+            background: '#10B981', flexShrink: 0,
+            animation: 'pulse 1s ease-in-out infinite',
+          }} />
+          {m.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function CandidatesPage() {
   const { data: candidates, get, loading, setData } = useApi<any[]>();
   const [preview, setPreview] = useState<any>(null);
@@ -541,11 +616,14 @@ export function CandidatesPage() {
                 </div>
 
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingMd" alignment="center">AI Research in Progress</Text>
+                  <Text as="h2" variant="headingMd" alignment="center">Research in Progress</Text>
                   <Text as="p" variant="bodySm" tone="subdued" alignment="center">
-                    Searching live suppliers and scoring products for your store...
+                    Our AI Agents are Deep Searching for the best results
                   </Text>
                 </BlockStack>
+
+                {/* Animated discovery messages */}
+                <ResearchActivityFeed running={researchRunning} />
 
                 {/* Progress bar */}
                 <div style={{ height: 12, borderRadius: 6, background: '#E4E5E7', overflow: 'hidden' }}>

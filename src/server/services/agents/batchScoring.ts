@@ -158,7 +158,7 @@ export async function runBatchMultiAgentScoring(
       explanation: ai?.viralReason || `${ai?.trendStage || 'stable'} — ${ai ? 'AI scored' : 'algorithmic only'}`,
     };
 
-    // Final score: 50% AI winnerScore + 50% weighted dimensions
+    // Final score: 60% AI winnerScore + 40% weighted dimensions
     const aiWinner = Math.min(100, Math.max(0, ai?.winnerScore || 50));
     const dimensionScore = Math.round(
       storeFit.score * 0.25 +
@@ -169,8 +169,16 @@ export async function runBatchMultiAgentScoring(
       supplier.score * 0.15
     );
     
-    let finalScore = Math.round(aiWinner * 0.50 + dimensionScore * 0.50);
-    finalScore = Math.min(100, Math.max(0, finalScore));
+    let finalScore = Math.round(aiWinner * 0.60 + dimensionScore * 0.40);
+
+    // Bonus points for exceptional products
+    if (storeFit.score >= 80 && profit.score >= 70) finalScore += 3;
+    if (aiWinner >= 85) finalScore += 2;
+    if (viral.viralScore >= 75) finalScore += 2;
+    if (product.orderVolume && product.orderVolume > 1000) finalScore += 2;
+    if (product.reviewRating && product.reviewRating >= 4.5) finalScore += 1;
+
+    finalScore = Math.min(99, Math.max(0, finalScore));
 
     let recommendation: MultiAgentScore['recommendation'];
     if (storeFit.score < 30) recommendation = 'avoid';
