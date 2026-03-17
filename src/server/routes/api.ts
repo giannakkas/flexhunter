@@ -466,16 +466,16 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
       });
     }
 
-    // Clean up stuck RUNNING jobs older than 5 minutes
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000);
+    // Clean up stuck RUNNING jobs older than 8 minutes
+    const eightMinAgo = new Date(Date.now() - 8 * 60 * 1000);
     await prisma.jobRun.updateMany({
-      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { lt: fiveMinAgo } },
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { lt: eightMinAgo } },
       data: { status: 'FAILED', error: 'Timed out — auto-cleaned on next research start', completedAt: new Date() },
     });
 
-    // Check if already running (only recent — within last 5 min)
+    // Check if already running (only recent — within last 8 min)
     const running = await prisma.jobRun.findFirst({
-      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { gte: fiveMinAgo } },
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { gte: eightMinAgo } },
     });
     if (running) {
       return res.json({ success: true, message: 'Research already running...', data: { status: 'RUNNING' } });

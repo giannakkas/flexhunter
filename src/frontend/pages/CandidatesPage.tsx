@@ -283,13 +283,42 @@ export function CandidatesPage() {
     }, 1000);
 
     (async () => {
-      for (let i = 0; i < 200; i++) {
+      const startedAt = Date.now();
+      const MAX_POLL_MS = 7 * 60 * 1000; // 7 minutes hard limit
+      
+      for (let i = 0; i < 150; i++) {
         await new Promise(r => setTimeout(r, 3000));
         if (!pollingActive.current) return;
+        
+        // Hard timeout — stop no matter what
+        if (Date.now() - startedAt > MAX_POLL_MS) {
+          stopPolling();
+          await get('/candidates?status=CANDIDATE&sort=score');
+          setResearchRunning(false);
+          setResearchProgress(100);
+          setResearchStage('⏱️ Research took too long — showing results found so far');
+          setMsg('Research timed out after 7 minutes. Any products found are shown below.');
+          return;
+        }
+        
         try {
           const s = await apiFetch<any>('/research/status');
           const j = s?.data;
           if (!j) continue;
+          
+          // Check if job is stuck (>7 min old and still RUNNING)
+          if (j.status === 'RUNNING' && j.createdAt) {
+            const jobAge = Date.now() - new Date(j.createdAt).getTime();
+            if (jobAge > MAX_POLL_MS) {
+              stopPolling();
+              await get('/candidates?status=CANDIDATE&sort=score');
+              setResearchRunning(false);
+              setResearchProgress(100);
+              setResearchStage('⏱️ Research completed — showing available results');
+              return;
+            }
+          }
+          
           if (j.status === 'COMPLETED') {
             stopPolling();
             setResearchProgress(100);
@@ -322,16 +351,22 @@ export function CandidatesPage() {
         if (job?.status === 'RUNNING') {
           const created = new Date(job.createdAt).getTime();
           const ageMs = Date.now() - created;
-          if (ageMs < 5 * 60 * 1000) {
+          if (ageMs < 7 * 60 * 1000) {
             const estimatedProg = Math.min(85, Math.round((ageMs / (5 * 60 * 1000)) * 90));
-            // Use whichever is higher: saved progress or age-based estimate
             const resumeProg = Math.max(_savedProgress, estimatedProg, 10);
             startPolling(resumeProg);
+          } else {
+            // Job is stuck (>7 min) — stop showing progress, load products
+            _savedRunning = false; _savedProgress = 0; _savedStage = '';
+            setResearchRunning(false); setResearchProgress(0);
+            get('/candidates?status=CANDIDATE&sort=score');
           }
-        } else if (job?.status === 'COMPLETED' || job?.status === 'FAILED') {
-          // Research ended while we were away — reset saved state
-          _savedRunning = false; _savedProgress = 0; _savedStage = '';
-          setResearchRunning(false); setResearchProgress(0);
+        } else {
+          // Research not running — reset saved state
+          if (_savedRunning) {
+            _savedRunning = false; _savedProgress = 0; _savedStage = '';
+            setResearchRunning(false); setResearchProgress(0);
+          }
         }
       } catch {}
     })();
