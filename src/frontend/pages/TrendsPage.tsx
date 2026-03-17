@@ -2,7 +2,7 @@ import { friendlyError } from '../utils/errors';
 import React, { useState, useEffect } from 'react';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
-  TextField, Banner, Spinner, Divider, InlineGrid, Tabs,
+  TextField, Banner, Spinner, Divider, InlineGrid,
 } from '@shopify/polaris';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../hooks/useApi';
@@ -18,7 +18,7 @@ const DIR_COLORS: Record<string, { bg: string; color: string; label: string; ico
 };
 
 const STAGE_COLORS: Record<string, { bg: string; color: string; label: string; icon: string }> = {
-  early_acceleration: { bg: '#FEE2E2', color: '#B91C1C', label: '🔥 Early Viral — 2-3 weeks early', icon: '🔥' },
+  early_acceleration: { bg: '#DCFCE7', color: '#15803D', label: '🔥 Early Viral — 2-3 weeks early', icon: '🔥' },
   breakout_candidate: { bg: '#FFF7ED', color: '#C2410C', label: '🚀 Breakout — 1-2 weeks early', icon: '🚀' },
   rising_trend: { bg: '#FEF9C3', color: '#A16207', label: '📈 Rising — 1 week early', icon: '📈' },
   stable_trend: { bg: '#EFF6FF', color: '#1D4ED8', label: '📊 Stable', icon: '📊' },
@@ -89,17 +89,28 @@ export function TrendsPage() {
   };
 
   const isSearching = loading || discoverLoading;
-  const tabs = [
-    { id: 'trends', content: '🔍 Trend Analysis' },
-    { id: 'viral', content: `🔥 Early Viral Products (${viralProducts.length})` },
-  ];
+  const tabBtnStyle = (active: boolean): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', gap: 8,
+    padding: '10px 22px', borderRadius: 10, fontSize: 14, fontWeight: 700,
+    cursor: 'pointer', border: 'none', transition: 'all 0.2s ease',
+    background: active ? 'linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)' : '#F3F4F6',
+    color: active ? '#fff' : '#374151',
+    boxShadow: active ? '0 4px 14px rgba(26,26,46,0.25)' : '0 1px 3px rgba(0,0,0,0.08)',
+  });
 
   return (
     <Page title="Trend Intelligence" subtitle="Detect winning products before competitors">
       <BlockStack gap="400">
         {error && <Banner tone="critical" onDismiss={() => setError(null)}><Text as="p">{error}</Text></Banner>}
 
-        <Tabs tabs={tabs} selected={tab} onSelect={setTab}>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <button style={tabBtnStyle(tab === 0)} onClick={() => setTab(0)}>
+            🔍 Trend Analysis
+          </button>
+          <button style={tabBtnStyle(tab === 1)} onClick={() => setTab(1)}>
+            🔥 Early Viral Products ({viralProducts.length})
+          </button>
+        </div>
 
           {/* ── Tab 0: Trend Analysis ── */}
           {tab === 0 && (
@@ -198,7 +209,7 @@ export function TrendsPage() {
                   </Text>
                   {viralSummary && (
                     <InlineStack gap="200">
-                      {viralSummary.earlyAcceleration > 0 && <Badge tone="critical">🔥 {viralSummary.earlyAcceleration} Early Viral</Badge>}
+                      {viralSummary.earlyAcceleration > 0 && <Badge tone="success">🔥 {viralSummary.earlyAcceleration} Early Viral</Badge>}
                       {viralSummary.breakoutCandidates > 0 && <Badge tone="warning">🚀 {viralSummary.breakoutCandidates} Breakout</Badge>}
                       {viralSummary.risingTrends > 0 && <Badge tone="info">📈 {viralSummary.risingTrends} Rising</Badge>}
                       <Badge>{viralSummary.total} total detected</Badge>
@@ -225,8 +236,8 @@ export function TrendsPage() {
                     return (
                       <div key={p.id} style={{
                         borderRadius: 14, overflow: 'hidden', background: 'white',
-                        border: p.stage === 'early_acceleration' ? '2px solid #EF4444' : p.stage === 'breakout_candidate' ? '2px solid #F97316' : '1px solid #E5E7EB',
-                        boxShadow: p.stage === 'early_acceleration' ? '0 0 15px rgba(239,68,68,0.15)' : 'none',
+                        border: p.stage === 'early_acceleration' ? '2px solid #22C55E' : p.stage === 'breakout_candidate' ? '2px solid #F97316' : '1px solid #E5E7EB',
+                        boxShadow: p.stage === 'early_acceleration' ? '0 0 15px rgba(34,197,94,0.2)' : 'none',
                       }}>
                         {/* Stage banner */}
                         <div style={{ padding: '6px 14px', background: stage.bg, color: stage.color, fontSize: 11, fontWeight: 700, textAlign: 'center' }}>
@@ -267,16 +278,16 @@ export function TrendsPage() {
                               </div>
                               <div style={{ textAlign: 'center' }}>
                                 <div style={{ fontSize: 9, color: '#6D7175', textTransform: 'uppercase', fontWeight: 600 }}>Viral</div>
-                                <div style={{ fontSize: 14, fontWeight: 700, color: p.viralScore >= 65 ? '#EF4444' : '#F59E0B' }}>{p.viralScore}/100</div>
+                                <div style={{ fontSize: 14, fontWeight: 700, color: p.viralScore >= 65 ? '#16A34A' : '#F59E0B' }}>{p.viralScore}/100</div>
                               </div>
                             </div>
 
                             {/* Time advantage */}
                             <div style={{
                               padding: '6px 10px', borderRadius: 8, textAlign: 'center',
-                              background: p.stage === 'early_acceleration' ? '#FEE2E2' : p.stage === 'breakout_candidate' ? '#FFF7ED' : '#EFF6FF',
+                              background: p.stage === 'early_acceleration' ? '#DCFCE7' : p.stage === 'breakout_candidate' ? '#FFF7ED' : '#EFF6FF',
                               fontWeight: 700, fontSize: 12,
-                              color: p.stage === 'early_acceleration' ? '#B91C1C' : p.stage === 'breakout_candidate' ? '#C2410C' : '#1D4ED8',
+                              color: p.stage === 'early_acceleration' ? '#15803D' : p.stage === 'breakout_candidate' ? '#C2410C' : '#1D4ED8',
                             }}>
                               ⏰ {p.timeAdvantage}
                             </div>
@@ -301,7 +312,6 @@ export function TrendsPage() {
               )}
             </BlockStack>
           )}
-        </Tabs>
 
         <div style={{ height: 80 }} />
       </BlockStack>
