@@ -219,6 +219,11 @@ function ResearchActivityFeed({ running }: { running: boolean }) {
   );
 }
 
+// Module-level state — persists across component remounts (tab switches)
+let _savedProgress = 0;
+let _savedStage = '';
+let _savedRunning = false;
+
 export function CandidatesPage() {
   const { data: candidates, get, loading, setData } = useApi<any[]>();
   const [preview, setPreview] = useState<any>(null);
@@ -230,12 +235,17 @@ export function CandidatesPage() {
   const [selIds, setSelIds] = useState<Set<string>>(new Set());
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; title: string; body: string; fn: () => void }>({ open: false, title: '', body: '', fn: () => {} });
 
-  // Research animation state
-  const [researchRunning, setResearchRunning] = useState(false);
-  const [researchProgress, setResearchProgress] = useState(0);
-  const [researchStage, setResearchStage] = useState('');
+  // Research animation state — initialized from module-level cache
+  const [researchRunning, setResearchRunning] = useState(_savedRunning);
+  const [researchProgress, setResearchProgress] = useState(_savedProgress);
+  const [researchStage, setResearchStage] = useState(_savedStage);
   const pollingActive = React.useRef(false);
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Sync state changes to module-level cache
+  useEffect(() => { _savedProgress = researchProgress; }, [researchProgress]);
+  useEffect(() => { _savedStage = researchStage; }, [researchStage]);
+  useEffect(() => { _savedRunning = researchRunning; }, [researchRunning]);
 
   // Only load candidates when NOT researching
   useEffect(() => { if (!researchRunning) get('/candidates?status=CANDIDATE&sort=score'); }, [get, researchRunning]);
@@ -314,8 +324,14 @@ export function CandidatesPage() {
           const ageMs = Date.now() - created;
           if (ageMs < 5 * 60 * 1000) {
             const estimatedProg = Math.min(85, Math.round((ageMs / (5 * 60 * 1000)) * 90));
-            startPolling(Math.max(10, estimatedProg));
+            // Use whichever is higher: saved progress or age-based estimate
+            const resumeProg = Math.max(_savedProgress, estimatedProg, 10);
+            startPolling(resumeProg);
           }
+        } else if (job?.status === 'COMPLETED' || job?.status === 'FAILED') {
+          // Research ended while we were away — reset saved state
+          _savedRunning = false; _savedProgress = 0; _savedStage = '';
+          setResearchRunning(false); setResearchProgress(0);
         }
       } catch {}
     })();
