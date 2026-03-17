@@ -127,7 +127,7 @@ export async function runBatchMultiAgentScoring(
     const storeFit: AgentResult = {
       score: Math.min(100, Math.max(0, ai?.storeFit || 60)),
       confidence: ai ? 0.7 : 0.3,
-      reasoning: ai?.storeFitReason || 'Scored without AI — moderate default',
+      reasoning: ai?.storeFitReason || 'Default score — limited data',
       signals: ai?.storeFitSignals || [],
     };
 
@@ -153,7 +153,7 @@ export async function runBatchMultiAgentScoring(
         ai?.giftWorthy ? '🎁 Gift-worthy' : '',
         ai?.impulsePrice ? '💰 Impulse-buy price range' : '',
         ai?.repeatPurchase ? '🔄 Repeat purchase potential' : '',
-        !ai ? '⚠️ AI unavailable — algorithmic score only' : '',
+        !ai ? '⚠️ Limited data — basic scoring applied' : '',
       ].filter(Boolean),
       explanation: ai?.viralReason || `${ai?.trendStage || 'stable'} — ${ai ? 'AI scored' : 'algorithmic only'}`,
     };
@@ -195,7 +195,7 @@ export async function runBatchMultiAgentScoring(
       supplierQuality: supplier,
       finalScore,
       recommendation,
-      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Winner: ${ai?.winnerScore || '?'}/100${winnerSignalsList ? ` — ${winnerSignalsList}` : ''}. Supplier: ${supplier.reasoning}.${!ai ? ' [Scored without AI]' : ''}`,
+      explanation: `Store fit: ${storeFit.score}/100 — ${storeFit.reasoning}. Profit: ${profit.reasoning}. Viral: ${viral.trendStage} (${viral.viralScore}/100). Winner: ${ai?.winnerScore || '?'}/100${winnerSignalsList ? ` — ${winnerSignalsList}` : ''}. Supplier: ${supplier.reasoning}.${!ai ? ' [Basic scoring]' : ''}`,
     });
   }
 

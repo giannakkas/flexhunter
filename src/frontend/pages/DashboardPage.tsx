@@ -240,21 +240,31 @@ export function DashboardPage() {
 
         {/* ── Middle Section: Health + Pipeline + Quick Actions ── */}
         <InlineGrid columns={{ xs: 1, md: 3 }} gap="300">
-          {/* Catalog Health */}
+          {/* Research Summary */}
           <Card>
             <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Catalog Health</Text>
-              <HealthGauge score={healthScore} label={healthScore >= 75 ? 'Excellent' : healthScore >= 50 ? 'Good' : healthScore >= 25 ? 'Needs Work' : 'Get Started'} />
-              <div style={{ textAlign: 'center' }}>
-                {d.totalImported === 0 ? (
-                  <Text as="p" variant="bodySm" tone="subdued">Import products to start tracking health</Text>
-                ) : (
-                  <Text as="p" variant="bodySm" tone="subdued">{d.totalWinners} winners out of {d.totalImported} products</Text>
-                )}
+              <Text as="h2" variant="headingMd">Research Summary</Text>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ textAlign: 'center', padding: 12, background: '#F0FDF4', borderRadius: 8 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#059669' }}>{d.totalCandidates}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Discovered</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: 12, background: '#EFF6FF', borderRadius: 8 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#2563EB' }}>{d.totalImported}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Imported</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: 12, background: '#F0FDF4', borderRadius: 8 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#10B981' }}>{d.totalWinners}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Winners</div>
+                </div>
+                <div style={{ textAlign: 'center', padding: 12, background: '#FEF2F2', borderRadius: 8 }}>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#EF4444' }}>{d.totalWeak}</div>
+                  <div style={{ fontSize: 11, color: '#6B7280' }}>Weak</div>
+                </div>
               </div>
               <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center' }}>
-                Research: {d.lastResearchAt ? new Date(d.lastResearchAt).toLocaleDateString() : 'Never'}
-                {' · '}Sync: {d.lastSyncAt ? new Date(d.lastSyncAt).toLocaleDateString() : 'Never'}
+                Last research: {d.lastResearchAt ? new Date(d.lastResearchAt).toLocaleDateString() : 'Never'}
+                {' · '}Last sync: {d.lastSyncAt ? new Date(d.lastSyncAt).toLocaleDateString() : 'Never'}
               </div>
             </BlockStack>
           </Card>

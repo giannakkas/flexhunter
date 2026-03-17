@@ -331,7 +331,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
 
   // ABSOLUTE FALLBACK: if scoring produced nothing, create basic scores algorithmically
   if (scored.length === 0 && relevant.length > 0) {
-    console.warn(`[Research] ⚠️ AI scoring returned 0 — using ALGORITHMIC FALLBACK for ${relevant.length} products`);
+    console.warn(`[Research] ⚠️ Scoring returned 0 — using ALGORITHMIC FALLBACK for ${relevant.length} products`);
     const { supplierQualityAgent, profitAgent, trendAgent } = await import('../agents');
     
     for (const p of relevant.slice(0, maxCandidates)) {
@@ -344,11 +344,11 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
         scored.push({
           ...p,
           agentScore: {
-            storeFit: { score: 50, confidence: 0.2, reasoning: 'AI unavailable — default', signals: [] },
+            storeFit: { score: 50, confidence: 0.2, reasoning: 'Default score — limited data', signals: [] },
             profitability: profit,
             trendPotential: trend,
-            viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ AI unavailable — algorithmic score only'], explanation: 'No AI data' },
-            saturation: { score: 50, confidence: 0.2, reasoning: 'AI unavailable — default', signals: [] },
+            viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ Limited data — basic scoring applied'], explanation: 'Limited data available' },
+            saturation: { score: 50, confidence: 0.2, reasoning: 'Default score — limited data', signals: [] },
             supplierQuality: supplier,
             finalScore,
             recommendation: finalScore >= 60 ? 'maybe' : 'skip',
@@ -372,7 +372,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
       totalScored: 0,
       totalSaved: 0,
       batchId,
-      message: 'AI scoring returned 0 products. This usually means the AI service is rate-limited. Please wait a minute and try again.',
+      message: 'Scoring returned 0 products. This usually means the AI service is rate-limited. Please wait a minute and try again.',
       topCandidates: [],
     };
   }

@@ -161,9 +161,9 @@ export function CandidatesPage() {
   const [researchStage, setResearchStage] = useState('');
   const pollingActive = React.useRef(false);
 
-  useEffect(() => { get('/candidates?status=CANDIDATE&sort=score'); }, [get]);
+  // Only load candidates when NOT researching
+  useEffect(() => { if (!researchRunning) get('/candidates?status=CANDIDATE&sort=score'); }, [get, researchRunning]);
 
-  // Single polling function — prevents duplicates via ref
   const startPolling = (fromProgress: number) => {
     if (pollingActive.current) return;
     pollingActive.current = true;
@@ -172,57 +172,59 @@ export function CandidatesPage() {
     let prog = fromProgress;
     let tick = 0;
     const msgs = [
-      '🔬 AI is scoring products...',
-      '⏳ DeepSeek analyzing your niche...',
-      '📊 Ranking by fit, profit & trend...',
+      '🔬 Scoring products for your store...',
+      '⏳ Analyzing niche fit & margins...',
+      '📊 Ranking by profit & trend potential...',
       '💾 Saving winning products...',
       '🎯 Finalizing scores...',
+      '📈 Evaluating viral potential...',
+      '🔍 Checking competition levels...',
+      '🚚 Rating supplier quality...',
     ];
 
+    // Progress caps at 90% — jumps to 100% only when server confirms done
     const timer = setInterval(() => {
       tick++;
-      if (prog < 95) prog = Math.min(95, prog + Math.random() * 0.5 + 0.1);
+      if (prog < 90) prog = Math.min(90, prog + Math.random() * 0.25 + 0.05);
       setResearchProgress(prog);
-      setResearchStage(msgs[Math.floor(tick / 6) % msgs.length]);
+      setResearchStage(msgs[Math.floor(tick / 8) % msgs.length]);
     }, 1000);
-
-    const stopPolling = (loadProducts: boolean) => {
-      clearInterval(timer);
-      pollingActive.current = false;
-      if (loadProducts) get('/candidates?status=CANDIDATE&sort=score');
-    };
 
     (async () => {
       for (let i = 0; i < 200; i++) {
         await new Promise(r => setTimeout(r, 3000));
-        if (!pollingActive.current) return;
+        if (!pollingActive.current) { clearInterval(timer); return; }
         try {
           const s = await apiFetch<any>('/research/status');
           const j = s?.data;
           if (!j) continue;
           if (j.status === 'COMPLETED') {
+            clearInterval(timer);
+            pollingActive.current = false;
             setResearchProgress(100);
             setResearchStage(`✅ Found ${(j.result as any)?.totalSaved || 0} products!`);
-            stopPolling(true);
+            await get('/candidates?status=CANDIDATE&sort=score');
             setTimeout(() => setResearchRunning(false), 2000);
             return;
           }
           if (j.status === 'FAILED') {
-            stopPolling(true);
+            clearInterval(timer);
+            pollingActive.current = false;
+            await get('/candidates?status=CANDIDATE&sort=score');
             setResearchRunning(false);
             setMsg(friendlyError(j.error || 'Research failed'));
             return;
           }
-          if (i % 10 === 0) get('/candidates?status=CANDIDATE&sort=score');
         } catch {}
       }
-      stopPolling(true);
+      clearInterval(timer);
+      pollingActive.current = false;
+      await get('/candidates?status=CANDIDATE&sort=score');
       setResearchRunning(false);
       setMsg('Research timed out. Products found so far are shown.');
     })();
   };
 
-  // On mount: detect running research (only if job is recent — last 5 min)
   useEffect(() => {
     (async () => {
       try {
@@ -230,8 +232,7 @@ export function CandidatesPage() {
         const job = s?.data;
         if (job?.status === 'RUNNING') {
           const created = new Date(job.createdAt).getTime();
-          const fiveMinAgo = Date.now() - 5 * 60 * 1000;
-          if (created > fiveMinAgo) startPolling(50);
+          if (created > Date.now() - 5 * 60 * 1000) startPolling(50);
         }
       } catch {}
     })();
@@ -239,12 +240,11 @@ export function CandidatesPage() {
   }, []); // eslint-disable-line
 
   const handleResearch = async () => {
-    // Stop any existing polling
     pollingActive.current = false;
     setData([]);
     setResearchRunning(true);
     setResearchProgress(2);
-    setResearchStage('🔑 Starting AI Research...');
+    setResearchStage('🔑 Starting research...');
 
     apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
 
