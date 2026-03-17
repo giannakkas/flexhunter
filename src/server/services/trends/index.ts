@@ -130,10 +130,13 @@ export async function aggregateTrend(keyword: string): Promise<AggregatedTrend> 
   // Minimum confidence floor when at least one source responded
   if (sourcesResponded > 0 && confidence < 0.4) confidence = 0.4;
 
-  // Determine direction
+  // Determine direction — factor in Amazon demand since Google daily trends rarely matches niche products
   let trendDirection: AggregatedTrend['trendDirection'] = 'unknown';
   if (google?.isBreakout || (tiktok?.isHot && google?.isRising)) trendDirection = 'surging';
+  else if (tiktok?.isHot || (tiktok?.growthRate || 0) > 50) trendDirection = 'surging';
   else if (google?.isRising || (tiktok?.growthRate || 0) > 30) trendDirection = 'rising';
+  else if (amazon?.demandSignal === 'high' && (tiktok?.viewCount || 0) > 100_000) trendDirection = 'rising';
+  else if (amazon?.demandSignal === 'high') trendDirection = 'stable'; // High Amazon demand = proven product
   else if (google && google.change30d < -20) trendDirection = 'declining';
   else if (sourcesResponded > 0) trendDirection = 'stable';
 

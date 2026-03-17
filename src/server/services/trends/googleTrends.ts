@@ -102,17 +102,9 @@ export async function getGoogleTrends(keyword: string): Promise<TrendData | null
       };
     }
 
-    // Not in today's trending — return low interest
-    return {
-      keyword,
-      interest: 20,
-      change7d: 0,
-      change30d: 0,
-      isRising: false,
-      isBreakout: false,
-      relatedQueries: [],
-      timestamp: new Date().toISOString(),
-    };
+    // Not in today's trending — we have NO DATA (daily trending only covers top viral searches)
+    // Return null so the aggregator knows Google has nothing to say about this keyword
+    return null;
   } catch (err: any) {
     console.warn(`[GoogleTrends] Error: ${err.message?.slice(0, 80)}`);
     return null;
@@ -160,12 +152,14 @@ export async function batchGoogleTrends(keywords: string[]): Promise<(TrendData 
         tq.includes(kwLower) || kwLower.includes(tq)
       );
 
+      if (!isTrending) return null; // No data — don't fake low interest
+
       return {
         keyword: kw,
-        interest: isTrending ? 75 : 20,
-        change7d: isTrending ? 30 : 0,
-        change30d: isTrending ? 50 : 0,
-        isRising: isTrending,
+        interest: 75,
+        change7d: 30,
+        change30d: 50,
+        isRising: true,
         isBreakout: false,
         relatedQueries: [],
         timestamp: new Date().toISOString(),

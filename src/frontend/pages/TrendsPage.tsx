@@ -177,7 +177,7 @@ export function TrendsPage() {
                           <InlineGrid columns={3} gap="300">
                             <div style={{ padding: 10, borderRadius: 8, background: '#EFF6FF', border: '1px solid #BFDBFE' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">🔍 Google</Text>
-                              {trend.google ? <Text as="p" variant="bodySm">Interest: {trend.google.interest}/100 | 30d: {trend.google.change30d > 0 ? '+' : ''}{trend.google.change30d}%</Text> : <Text as="p" variant="bodySm" tone="subdued">Stable — not in daily trends</Text>}
+                              {trend.google ? <Text as="p" variant="bodySm">Interest: {trend.google.interest}/100 | 30d: {trend.google.change30d > 0 ? '+' : ''}{trend.google.change30d}%</Text> : <Text as="p" variant="bodySm" tone="subdued">Not in daily trending (niche keyword)</Text>}
                             </div>
                             <div style={{ padding: 10, borderRadius: 8, background: '#FFF7ED', border: '1px solid #FED7AA' }}>
                               <Text as="p" variant="bodySm" fontWeight="bold">📱 TikTok</Text>
