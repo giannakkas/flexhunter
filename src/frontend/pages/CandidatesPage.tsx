@@ -326,6 +326,7 @@ export function CandidatesPage() {
   const [view, setView] = useState<'grid' | 'rows'>('grid');
   const [selIds, setSelIds] = useState<Set<string>>(new Set());
   const [confirmDlg, setConfirmDlg] = useState<{ open: boolean; title: string; body: string; fn: () => void }>({ open: false, title: '', body: '', fn: () => {} });
+  const [diagResults, setDiagResults] = useState<any>(null);
 
   // Subscribe to module-level polling state
   const [researchRunning, setResearchRunning] = useState(_poll.running);
@@ -382,6 +383,16 @@ export function CandidatesPage() {
     } catch (err: any) {
       _poll.running = false; _poll.notify();
       setMsg(friendlyError(err.message));
+    }
+  };
+
+  const runDiagnose = async () => {
+    setDiagResults({ loading: true });
+    try {
+      const r = await apiFetch<any>('/research/diagnose', { method: 'POST' });
+      setDiagResults(r.data || r);
+    } catch (e: any) {
+      setDiagResults({ error: e.message });
     }
   };
 
@@ -639,11 +650,39 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[]}
+      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
         {msg && <AutoDismiss message={msg} onDismiss={() => setMsg(null)} />}
+
+        {/* Diagnose Results */}
+        {diagResults && !diagResults.loading && (
+          <Card>
+            <BlockStack gap="200">
+              <InlineStack align="space-between">
+                <Text as="h2" variant="headingSm">🔍 Pipeline Diagnostic</Text>
+                <Button size="slim" onClick={() => setDiagResults(null)}>Dismiss</Button>
+              </InlineStack>
+              {diagResults.error ? (
+                <Text as="p" tone="critical">{diagResults.error}</Text>
+              ) : (
+                <BlockStack gap="100">
+                  {(diagResults.steps || []).map((s: any, i: number) => (
+                    <div key={i} style={{ padding: '4px 8px', borderRadius: 6, background: s.ok === false ? '#FEF2F2' : '#F0FDF4', fontSize: 12 }}>
+                      <span style={{ fontWeight: 700 }}>{s.ok === false ? '❌' : '✅'} {s.step}:</span>{' '}
+                      {s.error || s.result || s.description || (s.count !== undefined ? `${s.count} found` : '') || s.status || JSON.stringify(s).slice(0, 120)}
+                    </div>
+                  ))}
+                  {diagResults.errors?.length > 0 && (
+                    <Banner tone="critical"><Text as="p" variant="bodySm">{diagResults.errors.join(' | ')}</Text></Banner>
+                  )}
+                </BlockStack>
+              )}
+            </BlockStack>
+          </Card>
+        )}
+        {diagResults?.loading && <Card><div style={{ textAlign: 'center', padding: 20 }}><Spinner size="small" /> Running diagnostics...</div></Card>}
 
         {/* ── Research Animation Overlay ── */}
         {researchRunning && (

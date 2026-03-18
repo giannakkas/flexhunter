@@ -408,7 +408,7 @@ router.post('/research/diagnose', async (req: Request, res: Response) => {
       diag.steps.push({ step: 'providers', ok: available.length > 0, count: available.length, names: available.map((p: any) => p.name) });
       
       // Try fetching 1 product
-      const products = await providerRegistry.searchAll({ keyword: 'tactical', maxResults: 3 });
+      const products = await providerRegistry.searchAll({ keywords: ['tactical gloves'], limit: 3 });
       diag.steps.push({ step: 'fetch', ok: products.length > 0, count: products.length, firstTitle: products[0]?.title?.slice(0, 50) });
     } catch (err: any) {
       diag.steps.push({ step: 'fetch', ok: false, error: err.message?.slice(0, 150) });
@@ -442,7 +442,24 @@ Return JSON array: [{"storeFit":80,"saturation":60,"viralScore":70,"trendStage":
       where: { shopId, jobType: 'RESEARCH_PRODUCTS' },
       orderBy: { createdAt: 'desc' },
     });
-    diag.steps.push({ step: 'lastJob', status: latestJob?.status, error: latestJob?.error?.slice(0, 200), createdAt: latestJob?.createdAt });
+    diag.steps.push({ 
+      step: 'lastJob', 
+      status: latestJob?.status, 
+      error: latestJob?.error?.slice(0, 200), 
+      createdAt: latestJob?.createdAt,
+      result: latestJob?.result ? JSON.stringify(latestJob.result).slice(0, 300) : null,
+    });
+
+    // Step 7: Check last 3 job history
+    const recentJobs = await prisma.jobRun.findMany({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS' },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+    diag.steps.push({ 
+      step: 'jobHistory', 
+      jobs: recentJobs.map(j => ({ status: j.status, error: j.error?.slice(0, 100), created: j.createdAt, saved: (j.result as any)?.totalSaved, fetched: (j.result as any)?.totalFetched })),
+    });
 
     res.json({ success: true, data: diag });
   } catch (err: any) {
