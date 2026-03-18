@@ -117,7 +117,7 @@ export async function searchCJProducts(params: CJSearchParams): Promise<Normaliz
         })(),
         currency: 'USD',
         shippingCost: 0,
-        shippingDays: p.deliveryCycle ? parseInt(p.deliveryCycle) * 24 : 10,
+        shippingDays: p.deliveryCycle ? Math.min(parseInt(p.deliveryCycle), 30) : 10,
         shippingSpeed: 'STANDARD',
         warehouseCountry: p.countryCode || 'CN',
         reviewCount: p.listedNum || 0,

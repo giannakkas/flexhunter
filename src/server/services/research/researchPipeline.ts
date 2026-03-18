@@ -124,7 +124,7 @@ async function fetchProducts(
   // Deduplicate
   const seen = new Set<string>();
   const seenTitles = new Set<string>();
-  return rawProducts.filter(p => {
+  const deduped = rawProducts.filter(p => {
     const key = `${p.providerType}-${p.providerProductId}`;
     if (seen.has(key)) return false;
     seen.add(key);
@@ -133,6 +133,12 @@ async function fetchProducts(
     seenTitles.add(titleKey);
     return true;
   });
+  
+  // Log per-provider counts
+  const providerCounts = deduped.reduce((acc, p) => { acc[p.providerType] = (acc[p.providerType] || 0) + 1; return acc; }, {} as Record<string, number>);
+  console.log(`[Research] Fetch by provider: ${Object.entries(providerCounts).map(([k, v]) => `${k}: ${v}`).join(', ')}`);
+  
+  return deduped;
 }
 
 // ── Step 4: AI Relevance Filtering ──────────────

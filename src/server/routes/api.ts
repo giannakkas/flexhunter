@@ -518,7 +518,11 @@ router.post('/research/dry-run', async (req: Request, res: Response) => {
       const key = `${p.providerType}-${p.providerProductId}`;
       if (seen.has(key)) return false; seen.add(key); return true;
     });
-    results.steps.push({ step: 'dedup', afterDedup: allProducts.length });
+    results.steps.push({ 
+      step: 'dedup', 
+      afterDedup: allProducts.length,
+      byProvider: allProducts.reduce((acc: any, p: any) => { acc[p.providerType] = (acc[p.providerType] || 0) + 1; return acc; }, {}),
+    });
 
     // Step 3: Relevance filter
     if (allProducts.length > 0) {
