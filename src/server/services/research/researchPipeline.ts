@@ -368,9 +368,13 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   if (scored.length === 0 && relevant.length > 0) {
     console.warn(`[Research] ⚠️ AI scoring returned 0 — using PURE ALGORITHMIC FALLBACK for ${relevant.length} products`);
     
+    // Build keyword list from Store DNA for niche matching
+    const storeWords = (storeDesc + ' ' + (dna.nicheKeywords || []).join(' ') + ' ' + (settingsData.preferredCategories || []).join(' '))
+      .toLowerCase().split(/\s+/).filter(w => w.length > 3);
+    const nicheSet = new Set(storeWords);
+    
     for (const p of relevant.slice(0, maxCandidates)) {
       try {
-        // Pure math — no AI calls at all
         const costPrice = p.costPrice || 0;
         const sellPrice = p.suggestedPrice || 0;
         const margin = sellPrice > 0 ? ((sellPrice - costPrice) / sellPrice * 100) : 0;
@@ -378,33 +382,58 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
         const rating = p.reviewRating || 0;
         const shipping = p.shippingDays || 15;
 
+        // Keyword-based store fit — check how many niche words appear in the product
+        const productText = (p.title + ' ' + (p.category || '') + ' ' + (p.description || '')).toLowerCase();
+        const matchedWords = [...nicheSet].filter(w => productText.includes(w));
+        const matchRatio = nicheSet.size > 0 ? matchedWords.length / Math.min(nicheSet.size, 5) : 0;
+        const storeFitScore = matchRatio >= 0.6 ? 85 : matchRatio >= 0.3 ? 65 : matchRatio > 0 ? 45 : 20;
+
         const profitScore = margin > 60 ? 85 : margin > 45 ? 70 : margin > 30 ? 55 : 35;
         const demandScore = orders > 10000 ? 90 : orders > 3000 ? 75 : orders > 500 ? 60 : orders > 50 ? 45 : 30;
         const qualityScore = rating >= 4.7 ? 85 : rating >= 4.3 ? 70 : rating > 0 ? 55 : 40;
         const shipScore = shipping <= 7 ? 85 : shipping <= 14 ? 65 : 40;
         
-        const finalScore = Math.round(profitScore * 0.25 + demandScore * 0.30 + qualityScore * 0.20 + shipScore * 0.15 + 50 * 0.10);
+        // Store fit has HIGH weight in final score — bad niche fit = low score
+        const finalScore = Math.round(
+          storeFitScore * 0.30 + profitScore * 0.20 + demandScore * 0.25 + qualityScore * 0.15 + shipScore * 0.10
+        );
+        
+        const recommendation = storeFitScore < 30 ? 'avoid' as const : 
+          finalScore >= 65 ? 'buy' as const : finalScore >= 50 ? 'maybe' as const : 'skip' as const;
         
         scored.push({
           ...p,
           agentScore: {
-            storeFit: { score: 55, confidence: 0.3, reasoning: 'Algorithmic estimate — AI unavailable', signals: [] },
+            storeFit: { score: storeFitScore, confidence: 0.5, reasoning: matchedWords.length > 0 ? `Matched: ${matchedWords.slice(0, 3).join(', ')}` : 'No niche match', signals: matchedWords.slice(0, 3) },
             profitability: { score: profitScore, confidence: 0.8, reasoning: `${margin.toFixed(0)}% margin`, signals: margin > 50 ? ['Good margin >50%'] : [] },
             trendPotential: { score: demandScore, confidence: 0.6, reasoning: `${orders} orders`, signals: orders > 3000 ? ['Strong sales volume'] : [] },
             viralPrediction: { viralScore: 40, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ AI scoring unavailable — basic scores applied'], explanation: 'AI scoring failed' },
             saturation: { score: 50, confidence: 0.2, reasoning: 'Unknown — no AI data', signals: [] },
             supplierQuality: { score: shipScore, confidence: 0.7, reasoning: `Ships in ${shipping}d`, signals: [] },
             finalScore,
-            recommendation: finalScore >= 65 ? 'buy' : finalScore >= 50 ? 'maybe' : 'skip',
-            explanation: `[ALGORITHMIC] Margin: ${margin.toFixed(0)}%, Orders: ${orders}, Rating: ${rating}★, Ship: ${shipping}d. AI scoring was unavailable — scores are estimates.`,
+            recommendation,
+            explanation: `[ALGORITHMIC] Fit: ${storeFitScore}/100 (${matchedWords.length} keyword matches). Margin: ${margin.toFixed(0)}%, Orders: ${orders}, Rating: ${rating}★. AI unavailable.`,
           },
         });
       } catch (err: any) {
         console.error(`[Research] Fallback scoring failed for "${p.title?.slice(0, 30)}": ${err.message}`);
       }
     }
+    
+    // Filter out products with terrible niche fit
+    const beforeFilter = scored.length;
+    scored = scored.filter(p => p.agentScore.storeFit.score >= 30);
+    if (scored.length < 5 && beforeFilter > 5) {
+      // If too aggressive, keep top by score
+      scored = scored.concat(
+        relevant.slice(0, maxCandidates)
+          .map(p => scored.find(s => s.providerProductId === p.providerProductId))
+          .filter(Boolean) as any[]
+      ).slice(0, maxCandidates);
+    }
+    
     scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
-    console.log(`[Research] Algorithmic fallback produced ${scored.length} products`);
+    console.log(`[Research] Algorithmic fallback: ${beforeFilter} scored → ${scored.length} after niche filter`);
   }
 
   console.log(`[Research] Step 5/6: Scoring complete, proceeding to save`);

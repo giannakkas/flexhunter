@@ -308,15 +308,14 @@ export async function relevanceFilterAgent(
 
   const prompt = `You are a product relevance filter for a store that sells: "${storeDescription}"
 
-Here are ${products.length} products. Return the index numbers of products that are RELEVANT or RELATED to this store's niche.
+Here are ${products.length} products. Return the index numbers of products that belong in this store.
 
 RULES:
-- Include products that fit the store's niche, theme, or target audience
-- Include complementary products and accessories that make sense for this store
-- Include products a customer of this store would reasonably be interested in
-- ONLY exclude products that are completely unrelated to the store
-- When in doubt, INCLUDE — the scoring engine will rank them later
-- Try to include at least 60-70% of the products
+- Include products that fit the store's niche or are closely related
+- Include complementary products and accessories that make sense
+- EXCLUDE products that are clearly from a different niche (e.g., fashion items for a hunting store)
+- When in doubt about borderline products, INCLUDE them
+- Aim for 30-60% inclusion rate
 
 PRODUCTS:
 ${titles}
@@ -327,14 +326,41 @@ Return JSON: {"relevant": [array of index numbers]}`;
     const result = await aiComplete<{ relevant: number[] }>(prompt, {
       temperature: 0.1,
       maxTokens: 500,
-      systemPrompt: `Inclusive relevance filter for "${storeDescription}" store. Include anything related to the niche. Return only JSON with "relevant" array of index numbers.`,
+      systemPrompt: `Relevance filter for "${storeDescription}" store. Include products that fit the niche, exclude completely unrelated ones. Return only JSON with "relevant" array of index numbers.`,
     });
     if (result.relevant && Array.isArray(result.relevant)) {
-      return result.relevant.filter(i => i >= 0 && i < products.length);
+      const filtered = result.relevant.filter(i => i >= 0 && i < products.length);
+      if (filtered.length > 0) return filtered;
     }
   } catch (err) {
-    console.warn('[RelevanceFilter] Failed:', err);
+    console.warn('[RelevanceFilter] AI failed:', err);
   }
-  // Fallback: return all
-  return products.map((_, i) => i);
+  
+  // Keyword-based fallback when AI is unavailable
+  console.warn('[RelevanceFilter] Using keyword fallback');
+  const storeWords = storeDescription.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  if (storeWords.length === 0) return products.map((_, i) => i);
+  
+  const relevant: number[] = [];
+  for (let i = 0; i < products.length; i++) {
+    const text = (products[i].title + ' ' + (products[i].category || '') + ' ' + (products[i].description || '')).toLowerCase();
+    // Product must match at least 1 store keyword
+    if (storeWords.some(w => text.includes(w))) {
+      relevant.push(i);
+    }
+  }
+  
+  console.log(`[RelevanceFilter] Keyword fallback: ${products.length} → ${relevant.length} (keywords: ${storeWords.slice(0, 5).join(', ')})`);
+  
+  // If keyword filter is too strict, return top half by order volume
+  if (relevant.length < 5 && products.length >= 10) {
+    console.warn('[RelevanceFilter] Keyword filter too strict — returning top by orders');
+    const byOrders = products.map((p, i) => ({ i, orders: p.orderVolume || 0 }))
+      .sort((a, b) => b.orders - a.orders)
+      .slice(0, Math.ceil(products.length * 0.5))
+      .map(x => x.i);
+    return byOrders;
+  }
+  
+  return relevant.length > 0 ? relevant : products.map((_, i) => i);
 }
