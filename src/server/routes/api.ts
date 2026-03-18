@@ -468,6 +468,85 @@ Return JSON array: [{"storeFit":80,"saturation":60,"viralScore":70,"trendStage":
   }
 });
 
+// Dry-run: runs each pipeline step with real data, reports counts, doesn't save
+router.post('/research/dry-run', async (req: Request, res: Response) => {
+  const results: any = { steps: [], errors: [] };
+  try {
+    const shopId = await getOrCreateShop(req);
+    const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
+    if (!settings?.storeDescription) {
+      results.errors.push('No Store DNA configured');
+      return res.json({ success: true, data: results });
+    }
+    results.steps.push({ step: 'settings', storeDesc: settings.storeDescription.slice(0, 80) });
+
+    // Step 1: Keywords
+    const { aiComplete } = await import('../utils/ai');
+    let keywords: string[] = [];
+    try {
+      const kws = await aiComplete<string[]>(`Generate 5 product search keywords for: "${settings.storeDescription}". Return JSON array of 5 strings.`, {
+        temperature: 0.5, maxTokens: 200, systemPrompt: 'Return only a JSON array of 5 keyword strings.',
+      });
+      keywords = Array.isArray(kws) ? kws : [];
+      results.steps.push({ step: 'keywords', ok: keywords.length > 0, keywords });
+    } catch (e: any) {
+      results.steps.push({ step: 'keywords', ok: false, error: e.message?.slice(0, 150) });
+      results.errors.push(`Keywords: ${e.message?.slice(0, 100)}`);
+      // Fallback
+      keywords = settings.preferredCategories?.slice(0, 3) || [settings.storeDescription.split(' ').slice(0, 3).join(' ')];
+      results.steps.push({ step: 'keywords_fallback', keywords });
+    }
+
+    // Step 2: Fetch from each keyword
+    const { providerRegistry } = await import('../services/providers/providerRegistry');
+    let allProducts: any[] = [];
+    const fetchDetails: any[] = [];
+    for (const kw of keywords.slice(0, 5)) {
+      try {
+        const products = await providerRegistry.searchAll({ keywords: [kw], limit: 20 });
+        allProducts.push(...products);
+        fetchDetails.push({ keyword: kw, count: products.length });
+      } catch (e: any) {
+        fetchDetails.push({ keyword: kw, count: 0, error: e.message?.slice(0, 80) });
+      }
+    }
+    results.steps.push({ step: 'fetch', totalProducts: allProducts.length, perKeyword: fetchDetails });
+
+    // Dedup
+    const seen = new Set<string>();
+    allProducts = allProducts.filter(p => {
+      const key = `${p.providerType}-${p.providerProductId}`;
+      if (seen.has(key)) return false; seen.add(key); return true;
+    });
+    results.steps.push({ step: 'dedup', afterDedup: allProducts.length });
+
+    // Step 3: Relevance filter
+    if (allProducts.length > 0) {
+      try {
+        const { relevanceFilterAgent } = await import('../services/agents');
+        const indices = await relevanceFilterAgent(allProducts.slice(0, 30), settings.storeDescription);
+        results.steps.push({ step: 'relevanceFilter', input: Math.min(allProducts.length, 30), output: indices.length, indices: indices.slice(0, 20) });
+      } catch (e: any) {
+        results.steps.push({ step: 'relevanceFilter', ok: false, error: e.message?.slice(0, 150) });
+      }
+    }
+
+    // Step 4: Sample score (1 product)
+    if (allProducts.length > 0) {
+      try {
+        const sample = allProducts[0];
+        results.steps.push({ step: 'sampleProduct', title: sample.title?.slice(0, 60), cost: sample.costPrice, orders: sample.orderVolume, source: sample.sourceName });
+      } catch {}
+    }
+
+    results.summary = `${keywords.length} keywords → ${allProducts.length} products fetched. Pipeline should produce ${Math.min(allProducts.length, 27)} results.`;
+    res.json({ success: true, data: results });
+  } catch (err: any) {
+    results.errors.push(err.message?.slice(0, 300));
+    res.json({ success: true, data: results });
+  }
+});
+
 router.post('/research/start', researchRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);

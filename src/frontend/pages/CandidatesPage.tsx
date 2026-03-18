@@ -396,6 +396,16 @@ export function CandidatesPage() {
     }
   };
 
+  const runDryRun = async () => {
+    setDiagResults({ loading: true });
+    try {
+      const r = await apiFetch<any>('/research/dry-run', { method: 'POST' });
+      setDiagResults(r.data || r);
+    } catch (e: any) {
+      setDiagResults({ error: e.message });
+    }
+  };
+
   const selectProduct = async (id: string) => {
     setBusy(id);
     try { const r = await apiFetch<any>(`/candidates/${id}/select`, { method: 'POST' }); setMsg(r.message || 'Selected!'); }
@@ -650,7 +660,7 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }]}
+      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }, { content: '🧪 Dry Run', onAction: runDryRun }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
@@ -676,6 +686,11 @@ export function CandidatesPage() {
                   ))}
                   {diagResults.errors?.length > 0 && (
                     <Banner tone="critical"><Text as="p" variant="bodySm">{diagResults.errors.join(' | ')}</Text></Banner>
+                  )}
+                  {diagResults.summary && (
+                    <div style={{ padding: '8px 12px', borderRadius: 8, background: '#EFF6FF', fontWeight: 700, fontSize: 13 }}>
+                      📊 {diagResults.summary}
+                    </div>
                   )}
                 </BlockStack>
               )}
