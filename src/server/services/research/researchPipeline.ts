@@ -352,10 +352,14 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   const scoringStart = Date.now();
   
   try {
-    scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
+    // Hard 3-minute timeout on the entire scoring step
+    const scoringPromise = deepScore(relevant, dna, settingsData, maxCandidates, shopId);
+    const timeoutPromise = new Promise<never>((_, reject) => 
+      setTimeout(() => reject(new Error('Scoring timeout — exceeded 3 minutes')), 3 * 60 * 1000)
+    );
+    scored = await Promise.race([scoringPromise, timeoutPromise]);
   } catch (err: any) {
-    console.error(`[Research] ❌ SCORING CRASHED after ${((Date.now() - scoringStart) / 1000).toFixed(1)}s: ${err.message}`);
-    console.error(err.stack?.slice(0, 300));
+    console.error(`[Research] ❌ SCORING FAILED after ${((Date.now() - scoringStart) / 1000).toFixed(1)}s: ${err.message}`);
   }
 
   console.log(`[Research] Step 5/6: ${scored.length} products scored in ${((Date.now() - scoringStart) / 1000).toFixed(1)}s`);

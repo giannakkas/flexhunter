@@ -76,28 +76,23 @@ CRITICAL RULES:
 Return a JSON array of ${products.length} objects:
 [{"storeFit":number,"saturation":number,"viralScore":number,"trendStage":"string","winnerScore":number,"storeFitReason":"1 sentence","viralReason":"1 sentence","problemSolving":bool,"wowFactor":bool,"adFriendly":bool,"giftWorthy":bool,"impulsePrice":bool}]`;
 
-  // Try up to 2 times
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const results = await aiComplete<BatchAIResult[]>(prompt, {
-        temperature: 0.2,
-        maxTokens: 200 * products.length,
-        systemPrompt: `Product analyst. Return ONLY a JSON array of ${products.length} objects. No markdown, no explanation.`,
-      });
+  // Try once — the AI cascade already handles provider failover
+  try {
+    const start = Date.now();
+    const results = await aiComplete<BatchAIResult[]>(prompt, {
+      temperature: 0.2,
+      maxTokens: 200 * products.length,
+      systemPrompt: `Product analyst. Return ONLY a JSON array of ${products.length} objects. No markdown, no explanation.`,
+    });
 
-      if (Array.isArray(results) && results.length > 0) {
-        while (results.length < products.length) results.push(null as any);
-        console.log(`[BatchScore] AI scored ${results.filter(Boolean).length}/${products.length} products (attempt ${attempt})`);
-        return results;
-      }
-      console.warn(`[BatchScore] AI returned non-array (attempt ${attempt}):`, typeof results);
-    } catch (err: any) {
-      console.warn(`[BatchScore] AI failed (attempt ${attempt}): ${err.message?.slice(0, 100)}`);
-      if (attempt === 1) {
-        // Wait 2s before retry
-        await new Promise(r => setTimeout(r, 2000));
-      }
+    if (Array.isArray(results) && results.length > 0) {
+      while (results.length < products.length) results.push(null as any);
+      console.log(`[BatchScore] AI scored ${results.filter(Boolean).length}/${products.length} in ${((Date.now() - start) / 1000).toFixed(1)}s`);
+      return results;
     }
+    console.warn(`[BatchScore] AI returned non-array: ${typeof results}`);
+  } catch (err: any) {
+    console.warn(`[BatchScore] AI failed: ${err.message?.slice(0, 120)}`);
   }
 
   console.warn(`[BatchScore] All attempts failed — using algorithmic fallback`);

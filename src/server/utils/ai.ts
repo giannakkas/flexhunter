@@ -76,7 +76,7 @@ async function deepseekComplete<T = string>(prompt: string, options: AICompletio
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         model,
         temperature,
@@ -123,7 +123,7 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         model,
         temperature,
@@ -167,7 +167,7 @@ async function claudeComplete<T = string>(prompt: string, options: AICompletionO
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
-      signal: AbortSignal.timeout(30000),
+      signal: AbortSignal.timeout(15000),
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
@@ -217,7 +217,7 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        signal: AbortSignal.timeout(30000),
+        signal: AbortSignal.timeout(15000),
         body: JSON.stringify({
           contents,
           generationConfig: {
@@ -250,6 +250,9 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
 // DeepSeek V3 → OpenAI GPT-4o → Claude Sonnet → Gemini
 // ══════════════════════════════════════════════
 
+// Track failed providers to skip them in subsequent calls within the same session
+const _failedProviders = new Map<string, number>(); // provider name → timestamp of failure
+
 export async function aiComplete<T = string>(
   prompt: string,
   options: AICompletionOptions = {}
@@ -262,15 +265,29 @@ export async function aiComplete<T = string>(
   ];
 
   const errors: string[] = [];
+  const now = Date.now();
 
   for (const provider of providers) {
     if (!provider.key) continue;
+    
+    // Skip providers that failed recently (within 2 minutes) — don't waste 30s retrying dead APIs
+    const failedAt = _failedProviders.get(provider.name);
+    if (failedAt && now - failedAt < 120_000) {
+      errors.push(`${provider.name}: skipped (failed ${Math.round((now - failedAt) / 1000)}s ago)`);
+      continue;
+    }
+    
     try {
-      return await provider.fn();
+      const result = await provider.fn();
+      // Success — clear any failure record
+      _failedProviders.delete(provider.name);
+      return result;
     } catch (err: any) {
       const msg = err.message?.slice(0, 80) || 'unknown';
       console.warn(`[AI] ${provider.name} failed: ${msg}`);
       errors.push(`${provider.name}: ${msg}`);
+      // Mark as failed
+      _failedProviders.set(provider.name, now);
     }
   }
 

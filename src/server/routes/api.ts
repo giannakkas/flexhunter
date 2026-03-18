@@ -883,20 +883,35 @@ router.post('/candidates/reset', async (req: Request, res: Response) => {
 router.post('/candidates/force-clear', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
-    // Delete scores first (FK constraint)
+    
+    // 1. Delete imported products and their dependencies first
+    await prisma.replacementDecision.deleteMany({ where: { shopId } }).catch(() => {});
+    const imports = await prisma.importedProduct.findMany({ where: { shopId }, select: { id: true } });
+    for (const imp of imports) {
+      await prisma.productPerformance.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
+      await prisma.productPin.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
+    }
+    await prisma.importedProduct.deleteMany({ where: { shopId } }).catch(() => {});
+    
+    // 2. Delete candidate scores and watchlists
     const candidates = await prisma.candidateProduct.findMany({ where: { shopId }, select: { id: true } });
     for (const c of candidates) {
       await prisma.candidateScore.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
       await prisma.productWatchlist.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
     }
+    
+    // 3. Delete all candidates
     const deleted = await prisma.candidateProduct.deleteMany({ where: { shopId } });
-    // Also clean up stuck RUNNING jobs
+    
+    // 4. Clean up stuck jobs
     await prisma.jobRun.updateMany({
       where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
       data: { status: 'FAILED', error: 'Force cleared by user', completedAt: new Date() },
     });
-    res.json({ success: true, message: `Force cleared ${deleted.count} candidates + reset stuck jobs` });
+    
+    res.json({ success: true, message: `Force cleared ${deleted.count} candidates + ${imports.length} imports` });
   } catch (err: any) {
+    console.error('[ForceClear] Error:', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
