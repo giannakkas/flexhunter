@@ -360,52 +360,72 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
 
   console.log(`[Research] Step 5/6: ${scored.length} products scored in ${((Date.now() - scoringStart) / 1000).toFixed(1)}s`);
 
-  // ABSOLUTE FALLBACK: if scoring produced nothing, create basic scores algorithmically
+  // ABSOLUTE FALLBACK: if scoring produced nothing, create basic scores PURELY algorithmically (zero AI)
   if (scored.length === 0 && relevant.length > 0) {
-    console.warn(`[Research] ⚠️ Scoring returned 0 — using ALGORITHMIC FALLBACK for ${relevant.length} products`);
-    const { supplierQualityAgent, profitAgent, trendAgent } = await import('../agents');
+    console.warn(`[Research] ⚠️ AI scoring returned 0 — using PURE ALGORITHMIC FALLBACK for ${relevant.length} products`);
     
     for (const p of relevant.slice(0, maxCandidates)) {
       try {
-        const profit = await profitAgent(p);
-        const trend = await trendAgent(p);
-        const supplier = supplierQualityAgent(p);
-        const finalScore = Math.round(profit.score * 0.30 + trend.score * 0.30 + supplier.score * 0.20 + 50 * 0.20);
+        // Pure math — no AI calls at all
+        const costPrice = p.costPrice || 0;
+        const sellPrice = p.suggestedPrice || 0;
+        const margin = sellPrice > 0 ? ((sellPrice - costPrice) / sellPrice * 100) : 0;
+        const orders = p.orderVolume || 0;
+        const rating = p.reviewRating || 0;
+        const shipping = p.shippingDays || 15;
+
+        const profitScore = margin > 60 ? 85 : margin > 45 ? 70 : margin > 30 ? 55 : 35;
+        const demandScore = orders > 10000 ? 90 : orders > 3000 ? 75 : orders > 500 ? 60 : orders > 50 ? 45 : 30;
+        const qualityScore = rating >= 4.7 ? 85 : rating >= 4.3 ? 70 : rating > 0 ? 55 : 40;
+        const shipScore = shipping <= 7 ? 85 : shipping <= 14 ? 65 : 40;
+        
+        const finalScore = Math.round(profitScore * 0.25 + demandScore * 0.30 + qualityScore * 0.20 + shipScore * 0.15 + 50 * 0.10);
         
         scored.push({
           ...p,
           agentScore: {
-            storeFit: { score: 50, confidence: 0.2, reasoning: 'Default score — limited data', signals: [] },
-            profitability: profit,
-            trendPotential: trend,
-            viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ Limited data — basic scoring applied'], explanation: 'Limited data available' },
-            saturation: { score: 50, confidence: 0.2, reasoning: 'Default score — limited data', signals: [] },
-            supplierQuality: supplier,
+            storeFit: { score: 55, confidence: 0.3, reasoning: 'Algorithmic estimate — AI unavailable', signals: [] },
+            profitability: { score: profitScore, confidence: 0.8, reasoning: `${margin.toFixed(0)}% margin`, signals: margin > 50 ? ['Good margin >50%'] : [] },
+            trendPotential: { score: demandScore, confidence: 0.6, reasoning: `${orders} orders`, signals: orders > 3000 ? ['Strong sales volume'] : [] },
+            viralPrediction: { viralScore: 40, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.2, signals: ['⚠️ AI scoring unavailable — basic scores applied'], explanation: 'AI scoring failed' },
+            saturation: { score: 50, confidence: 0.2, reasoning: 'Unknown — no AI data', signals: [] },
+            supplierQuality: { score: shipScore, confidence: 0.7, reasoning: `Ships in ${shipping}d`, signals: [] },
             finalScore,
-            recommendation: finalScore >= 60 ? 'maybe' : 'skip',
-            explanation: `Algorithmic fallback — AI unavailable. Profit: ${profit.reasoning}. Trend: ${trend.reasoning}. [AI scoring failed — results may be less accurate]`,
+            recommendation: finalScore >= 65 ? 'buy' : finalScore >= 50 ? 'maybe' : 'skip',
+            explanation: `[ALGORITHMIC] Margin: ${margin.toFixed(0)}%, Orders: ${orders}, Rating: ${rating}★, Ship: ${shipping}d. AI scoring was unavailable — scores are estimates.`,
           },
         });
-      } catch {}
+      } catch (err: any) {
+        console.error(`[Research] Fallback scoring failed for "${p.title?.slice(0, 30)}": ${err.message}`);
+      }
     }
     scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
+    console.log(`[Research] Algorithmic fallback produced ${scored.length} products`);
   }
 
   console.log(`[Research] Step 5/6: Scoring complete, proceeding to save`);
 
   // Step 6: Save results
-  // Only clear old candidates if we actually found new ones
   if (scored.length === 0) {
-    console.warn(`[Research] ⚠️ Scoring returned 0 products — keeping existing candidates`);
-    return {
-      totalFetched: allProducts.length,
-      totalRelevant: relevant.length,
-      totalScored: 0,
-      totalSaved: 0,
-      batchId,
-      message: 'Scoring returned 0 products. This usually means the AI service is rate-limited. Please wait a minute and try again.',
-      topCandidates: [],
-    };
+    console.error(`[Research] ⚠️ CRITICAL: Both AI scoring AND algorithmic fallback produced 0 products from ${relevant.length} relevant. This should not happen.`);
+    // Last resort: just wrap relevant products with minimal scores
+    for (const p of relevant.slice(0, maxCandidates)) {
+      scored.push({
+        ...p,
+        agentScore: {
+          storeFit: { score: 50, confidence: 0.1, reasoning: 'Emergency fallback', signals: [] },
+          profitability: { score: 50, confidence: 0.1, reasoning: 'Unknown', signals: [] },
+          trendPotential: { score: 50, confidence: 0.1, reasoning: 'Unknown', signals: [] },
+          viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.1, signals: ['Emergency fallback'], explanation: 'Scoring failed entirely' },
+          saturation: { score: 50, confidence: 0.1, reasoning: 'Unknown', signals: [] },
+          supplierQuality: { score: 50, confidence: 0.1, reasoning: 'Unknown', signals: [] },
+          finalScore: 50,
+          recommendation: 'maybe' as any,
+          explanation: 'Emergency fallback — all scoring failed. Basic product data only.',
+        },
+      });
+    }
+    console.log(`[Research] Emergency fallback: wrapped ${scored.length} products with basic scores`);
   }
 
   // Delete old candidates that haven't been imported

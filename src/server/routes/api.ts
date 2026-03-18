@@ -879,6 +879,28 @@ router.post('/candidates/reset', async (req: Request, res: Response) => {
   }
 });
 
+// Force clear ALL candidates — even imported-linked ones
+router.post('/candidates/force-clear', async (req: Request, res: Response) => {
+  try {
+    const shopId = await getOrCreateShop(req);
+    // Delete scores first (FK constraint)
+    const candidates = await prisma.candidateProduct.findMany({ where: { shopId }, select: { id: true } });
+    for (const c of candidates) {
+      await prisma.candidateScore.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
+      await prisma.productWatchlist.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
+    }
+    const deleted = await prisma.candidateProduct.deleteMany({ where: { shopId } });
+    // Also clean up stuck RUNNING jobs
+    await prisma.jobRun.updateMany({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
+      data: { status: 'FAILED', error: 'Force cleared by user', completedAt: new Date() },
+    });
+    res.json({ success: true, message: `Force cleared ${deleted.count} candidates + reset stuck jobs` });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/candidates/:id/watchlist', async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);

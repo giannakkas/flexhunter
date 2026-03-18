@@ -406,6 +406,17 @@ export function CandidatesPage() {
     }
   };
 
+  const forceClear = async () => {
+    try {
+      const r = await apiFetch<any>('/candidates/force-clear', { method: 'POST' });
+      setMsg(r.message || 'Cleared all candidates');
+      setData([]);
+      get('/candidates?status=CANDIDATE&sort=score');
+    } catch (e: any) {
+      setMsg(friendlyError(e.message));
+    }
+  };
+
   const selectProduct = async (id: string) => {
     setBusy(id);
     try { const r = await apiFetch<any>(`/candidates/${id}/select`, { method: 'POST' }); setMsg(r.message || 'Selected!'); }
@@ -660,7 +671,7 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }, { content: '🧪 Dry Run', onAction: runDryRun }]}
+      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }, { content: '🧪 Dry Run', onAction: runDryRun }, { content: '🗑️ Clear All', onAction: forceClear, destructive: true }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
