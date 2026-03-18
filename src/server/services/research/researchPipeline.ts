@@ -180,16 +180,21 @@ async function deepScore(
   let aiCallCount = 0;
   let nullCount = 0;
   let avoidCount = 0;
+  const totalBatches = Math.ceil(products.length / batchSize);
 
   for (let i = 0; i < products.length; i += batchSize) {
+    const batchNum = Math.floor(i / batchSize) + 1;
     const batch = products.slice(i, i + batchSize);
     let scores: (MultiAgentScore | null)[];
     
+    const batchStart = Date.now();
     try {
+      console.log(`[Research] Scoring batch ${batchNum}/${totalBatches} (${batch.length} products)...`);
       scores = await runBatchMultiAgentScoring(batch, dna, settings);
       aiCallCount++;
+      console.log(`[Research] Batch ${batchNum} done in ${((Date.now() - batchStart) / 1000).toFixed(1)}s — ${scores.filter(Boolean).length}/${batch.length} scored`);
     } catch (err: any) {
-      console.error(`[Research] Batch scoring FAILED: ${err.message}`);
+      console.error(`[Research] Batch ${batchNum} FAILED after ${((Date.now() - batchStart) / 1000).toFixed(1)}s: ${err.message}`);
       scores = batch.map(() => null);
     }
 
@@ -342,15 +347,18 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   console.log(`[Research] Step 4/6: ${relevant.length} relevant products after AI filter`);
 
   // Step 5: Multi-Agent Deep Scoring
-  console.log(`[Research] Step 5/6: Running BATCH AI scoring (1 call per 5 products)...`);
+  console.log(`[Research] Step 5/6: Running BATCH AI scoring (1 call per 5 products, ${relevant.length} to score)...`);
   let scored: (NormalizedProduct & { agentScore: MultiAgentScore })[] = [];
+  const scoringStart = Date.now();
   
   try {
     scored = await deepScore(relevant, dna, settingsData, maxCandidates, shopId);
   } catch (err: any) {
-    console.error(`[Research] ❌ SCORING CRASHED: ${err.message}`);
+    console.error(`[Research] ❌ SCORING CRASHED after ${((Date.now() - scoringStart) / 1000).toFixed(1)}s: ${err.message}`);
     console.error(err.stack?.slice(0, 300));
   }
+
+  console.log(`[Research] Step 5/6: ${scored.length} products scored in ${((Date.now() - scoringStart) / 1000).toFixed(1)}s`);
 
   // ABSOLUTE FALLBACK: if scoring produced nothing, create basic scores algorithmically
   if (scored.length === 0 && relevant.length > 0) {
@@ -383,7 +391,7 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
   }
 
-  console.log(`[Research] Step 5/6: ${scored.length} products scored and ranked`);
+  console.log(`[Research] Step 5/6: Scoring complete, proceeding to save`);
 
   // Step 6: Save results
   // Only clear old candidates if we actually found new ones

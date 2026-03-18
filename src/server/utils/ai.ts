@@ -76,6 +76,7 @@ async function deepseekComplete<T = string>(prompt: string, options: AICompletio
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         model,
         temperature,
@@ -122,6 +123,7 @@ async function openaiComplete<T = string>(prompt: string, options: AICompletionO
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         model,
         temperature,
@@ -165,6 +167,7 @@ async function claudeComplete<T = string>(prompt: string, options: AICompletionO
         'x-api-key': apiKey,
         'anthropic-version': '2023-06-01',
       },
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         model,
         max_tokens: maxTokens,
@@ -214,6 +217,7 @@ async function geminiComplete<T = string>(prompt: string, options: AICompletionO
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(30000),
         body: JSON.stringify({
           contents,
           generationConfig: {
