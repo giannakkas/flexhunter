@@ -914,6 +914,10 @@ router.post('/candidates/force-clear', async (req: Request, res: Response) => {
     });
     
     res.json({ success: true, message: `Force cleared ${deleted.count} candidates + ${imports.length} imports` });
+    
+    // Invalidate caches AFTER response (non-blocking)
+    cache.invalidatePrefix(`candidates:${shopId}`).catch(() => {});
+    cache.invalidatePrefix(`dashboard:${shopId}`).catch(() => {});
   } catch (err: any) {
     console.error('[ForceClear] Error:', err.message);
     res.status(500).json({ success: false, error: err.message });

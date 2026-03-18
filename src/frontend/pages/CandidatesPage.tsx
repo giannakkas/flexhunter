@@ -332,15 +332,21 @@ export function CandidatesPage() {
     }
   };
 
+  const [clearing, setClearing] = useState(false);
+
   const forceClear = async () => {
+    setClearing(true);
     try {
       const r = await apiFetch<any>('/candidates/force-clear', { method: 'POST' });
-      setMsg(r.message || 'Cleared all candidates');
+      setMsg(r.message || 'Cleared all products');
       setData([]);
-      get('/candidates?status=CANDIDATE&sort=score');
+      // Wait for cache to expire then reload
+      await new Promise(r => setTimeout(r, 500));
+      await get('/candidates?status=CANDIDATE&sort=score');
     } catch (e: any) {
       setMsg(friendlyError(e.message));
     }
+    setClearing(false);
   };
 
   const selectProduct = async (id: string) => {
@@ -597,7 +603,7 @@ export function CandidatesPage() {
   return (
     <Page title="Product Research" subtitle={`${items.length} products discovered`}
       primaryAction={{ content: researchRunning ? 'Researching...' : '🔬 Run AI Research', onAction: handleResearch, loading: researchRunning, disabled: researchRunning }}
-      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }, { content: '🧪 Dry Run', onAction: runDryRun }, { content: '🗑️ Clear All', onAction: forceClear, destructive: true }]}
+      secondaryActions={[{ content: '🔍 Diagnose', onAction: runDiagnose }, { content: '🧪 Dry Run', onAction: runDryRun }, { content: clearing ? '⏳ Clearing...' : '🗑️ Clear All', onAction: forceClear, destructive: true, loading: clearing, disabled: clearing }]}
     >
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
@@ -635,6 +641,20 @@ export function CandidatesPage() {
           </Card>
         )}
         {diagResults?.loading && <Card><div style={{ textAlign: 'center', padding: 20 }}><Spinner size="small" /> Running diagnostics...</div></Card>}
+
+        {clearing && (
+          <Card>
+            <div style={{ padding: '20px 0' }}>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd" alignment="center">Clearing All Products...</Text>
+                <Text as="p" variant="bodySm" alignment="center" tone="subdued">Removing candidates, imports, scores, and cached data</Text>
+                <div style={{ height: 6, borderRadius: 3, background: '#E5E7EB', overflow: 'hidden', margin: '0 20px' }}>
+                  <div style={{ height: '100%', borderRadius: 3, background: 'linear-gradient(90deg, #EF4444, #F97316)', width: '100%', animation: 'shimmer 1s linear infinite' }} />
+                </div>
+              </BlockStack>
+            </div>
+          </Card>
+        )}
 
         {/* ── Research Animation Overlay ── */}
         {researchRunning && (

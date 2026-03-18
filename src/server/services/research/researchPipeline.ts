@@ -467,20 +467,30 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     console.log(`[Research] Emergency fallback: wrapped ${scored.length} products with basic scores`);
   }
 
-  // Delete old candidates that haven't been imported
-  // First find IDs of candidates that HAVE been imported (to exclude them)
+  // Delete old candidates that haven't been imported — MUST clean FK dependencies first
   const importedCandidateIds = await prisma.importedProduct.findMany({
     where: { shopId },
     select: { candidateId: true },
   }).then(items => items.map(i => i.candidateId).filter(Boolean));
 
-  const deletedOld = await prisma.candidateProduct.deleteMany({
-    where: {
-      shopId,
-      id: { notIn: importedCandidateIds },
-    },
+  // Find candidates to delete
+  const toDelete = await prisma.candidateProduct.findMany({
+    where: { shopId, id: { notIn: importedCandidateIds } },
+    select: { id: true },
   });
-  console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old candidates (preserved ${importedCandidateIds.length} imported), saving ${scored.length} new`);
+  
+  // Delete FK dependencies first
+  if (toDelete.length > 0) {
+    const deleteIds = toDelete.map(c => c.id);
+    await prisma.candidateScore.deleteMany({ where: { candidateId: { in: deleteIds } } }).catch(() => {});
+    await prisma.productWatchlist.deleteMany({ where: { candidateId: { in: deleteIds } } }).catch(() => {});
+    const deletedOld = await prisma.candidateProduct.deleteMany({
+      where: { id: { in: deleteIds } },
+    });
+    console.log(`[Research] Step 6/6: Cleared ${deletedOld.count} old candidates (preserved ${importedCandidateIds.length} imported), saving ${scored.length} new`);
+  } else {
+    console.log(`[Research] Step 6/6: No old candidates to clear, saving ${scored.length} new`);
+  }
 
   let savedCount = 0;
   const saveErrors: string[] = [];
@@ -574,6 +584,15 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
   if (saveErrors.length > 0) {
     console.error(`[Research] Save errors (${saveErrors.length}/${scored.length}): ${saveErrors[0]}`);
   }
+
+  // Invalidate caches immediately after saving
+  try {
+    const cacheModule = await import('../../utils/cache');
+    const cache = cacheModule.default;
+    await cache.invalidatePrefix(`candidates:${shopId}`);
+    await cache.invalidatePrefix(`dashboard:${shopId}`);
+    console.log(`[Research] Cache invalidated for shop ${shopId}`);
+  } catch {}
 
   // Audit log
   await prisma.auditLog.create({
