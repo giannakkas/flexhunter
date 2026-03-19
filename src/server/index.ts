@@ -136,6 +136,113 @@ async function save(){
 </script></body></html>`);
 });
 
+// Privacy Policy — required for App Store submission
+app.get('/privacy', (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlexHunter — Privacy Policy</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;color:#1a1a2e;line-height:1.7}
+h1{font-size:28px;margin-bottom:8px}h2{font-size:20px;margin-top:32px;color:#16213E}
+.updated{color:#6B7280;font-size:14px;margin-bottom:32px}
+a{color:#007ACE}p{margin:12px 0}
+.back{display:inline-block;margin-top:32px;padding:10px 24px;background:#1a1a2e;color:white;text-decoration:none;border-radius:8px;font-weight:600}
+</style></head><body>
+<h1>Privacy Policy</h1>
+<p class="updated">Last updated: March 19, 2026</p>
+
+<p>FlexHunter ("we", "our", "us") is a Shopify embedded app that helps merchants discover, analyze, and import winning products for their stores. This privacy policy explains what data we collect and how we use it.</p>
+
+<h2>1. Data We Collect</h2>
+<p><strong>Store Information:</strong> When you install FlexHunter, we access your Shopify store name, email, domain, and currency through the Shopify API. This is required for the app to function.</p>
+<p><strong>Product Data:</strong> We store product research results, AI-generated scores, imported product details, and performance metrics (views, orders, revenue) within our database.</p>
+<p><strong>Store DNA / Preferences:</strong> You provide your store description, target audience, preferred categories, and price ranges to customize product research. This data is stored in our database.</p>
+<p><strong>We do NOT collect:</strong> Customer personal information, payment details, browsing history, or any data about your customers' end users. FlexHunter operates exclusively with product and store-level data.</p>
+
+<h2>2. How We Use Your Data</h2>
+<p>Your data is used solely to provide FlexHunter's services: AI-powered product research, scoring, trend analysis, and Shopify product management. We do not sell, rent, or share your data with third parties for marketing purposes.</p>
+<p><strong>Third-party AI services:</strong> Product descriptions and titles (not customer data) are sent to AI providers (DeepSeek, OpenAI, Anthropic, Google) for scoring and analysis. These services process data according to their own privacy policies.</p>
+<p><strong>Third-party product APIs:</strong> We query AliExpress and CJ Dropshipping APIs to find products. Only search keywords derived from your store description are sent to these services.</p>
+
+<h2>3. Data Storage and Security</h2>
+<p>Your data is stored in a PostgreSQL database hosted on Railway (US-based infrastructure). All data is encrypted in transit via HTTPS/TLS. Access to the database is restricted to the application only.</p>
+
+<h2>4. Data Retention</h2>
+<p>We retain your data for as long as you have FlexHunter installed. When you uninstall the app, your store is deactivated. Within 48 hours of uninstallation, Shopify sends a shop/redact webhook, and we permanently delete all data associated with your store.</p>
+
+<h2>5. Your Rights</h2>
+<p>You can request a copy of your data or request deletion at any time by contacting us. Under GDPR, you have the right to access, rectify, and erase your personal data. Under CCPA, California residents have the right to know what data is collected and to request deletion.</p>
+
+<h2>6. GDPR and CCPA Compliance</h2>
+<p>FlexHunter complies with Shopify's mandatory GDPR webhooks. We respond to customer data requests, customer data erasure requests, and shop data erasure requests as required by Shopify's platform policies and applicable privacy laws.</p>
+
+<h2>7. Cookies</h2>
+<p>FlexHunter does not use third-party cookies. We use Shopify's session token authentication for embedded app functionality. No tracking cookies are set.</p>
+
+<h2>8. Changes to This Policy</h2>
+<p>We may update this policy from time to time. Changes will be posted on this page with an updated "Last updated" date. Continued use of FlexHunter after changes constitutes acceptance of the revised policy.</p>
+
+<h2>9. Contact</h2>
+<p>For privacy-related questions, data requests, or concerns:</p>
+<p>Email: <a href="mailto:privacy@flexhunter.app">privacy@flexhunter.app</a></p>
+<p>FlexHunter is operated by Christos Giannakkas, based in Cyprus.</p>
+
+<a class="back" href="/">← Back to FlexHunter</a>
+</body></html>`);
+});
+
+// Terms of Service
+app.get('/terms', (_req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FlexHunter — Terms of Service</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:800px;margin:0 auto;padding:40px 20px;color:#1a1a2e;line-height:1.7}
+h1{font-size:28px;margin-bottom:8px}h2{font-size:20px;margin-top:32px;color:#16213E}
+.updated{color:#6B7280;font-size:14px;margin-bottom:32px}
+a{color:#007ACE}p{margin:12px 0}
+.back{display:inline-block;margin-top:32px;padding:10px 24px;background:#1a1a2e;color:white;text-decoration:none;border-radius:8px;font-weight:600}
+</style></head><body>
+<h1>Terms of Service</h1>
+<p class="updated">Last updated: March 19, 2026</p>
+
+<p>By installing and using FlexHunter ("the App"), you agree to these Terms of Service.</p>
+
+<h2>1. Description of Service</h2>
+<p>FlexHunter is an AI-powered product research and discovery tool for Shopify merchants. The App searches third-party supplier APIs, scores products using artificial intelligence, and allows merchants to import selected products to their Shopify store.</p>
+
+<h2>2. Account and Access</h2>
+<p>You must have a valid Shopify store to use FlexHunter. By installing the App, you authorize FlexHunter to access your store's product and order data through the Shopify API as described in our Privacy Policy.</p>
+
+<h2>3. Pricing and Billing</h2>
+<p>FlexHunter offers a free tier and paid subscription plans. All paid charges are processed through Shopify's Billing API. Subscription details, limits, and pricing are displayed within the App on the Plans & Pricing page. You may cancel your subscription at any time through your Shopify admin.</p>
+
+<h2>4. Product Data and Accuracy</h2>
+<p>Product information (pricing, availability, images, ratings) is sourced from third-party supplier APIs including AliExpress and CJ Dropshipping. FlexHunter does not guarantee the accuracy, availability, or quality of products displayed. AI-generated scores and recommendations are estimates and should not be the sole basis for business decisions. Always verify product details with the original supplier before selling.</p>
+
+<h2>5. AI-Generated Content</h2>
+<p>FlexHunter uses AI services to generate product scores, SEO descriptions, and trend analyses. AI-generated content may contain inaccuracies. You are responsible for reviewing and editing any content before publishing it on your store.</p>
+
+<h2>6. Limitation of Liability</h2>
+<p>FlexHunter is provided "as is" without warranties of any kind. We are not liable for any lost profits, revenue, or business opportunities arising from the use of the App, inaccurate product data, or AI-generated recommendations. Our total liability shall not exceed the amount you paid for the App in the preceding 12 months.</p>
+
+<h2>7. Prohibited Uses</h2>
+<p>You may not use FlexHunter to sell prohibited products, engage in fraudulent activity, or violate any applicable laws. You must comply with Shopify's Acceptable Use Policy and the terms of any third-party suppliers.</p>
+
+<h2>8. Termination</h2>
+<p>You may uninstall FlexHunter at any time through your Shopify admin. We reserve the right to suspend or terminate access to the App for violations of these terms. Upon uninstallation, your data will be deleted as described in our Privacy Policy.</p>
+
+<h2>9. Changes to Terms</h2>
+<p>We may update these terms from time to time. Continued use of FlexHunter after changes constitutes acceptance of the revised terms.</p>
+
+<h2>10. Contact</h2>
+<p>Email: <a href="mailto:support@flexhunter.app">support@flexhunter.app</a></p>
+<p>FlexHunter is operated by Christos Giannakkas, based in Cyprus.</p>
+
+<a class="back" href="/">← Back to FlexHunter</a>
+</body></html>`);
+});
+
 // Serve frontend in production
 if (!config.isDev) {
   const frontendPath = path.join(__dirname, '../../dist/frontend');
