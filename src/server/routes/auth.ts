@@ -81,11 +81,14 @@ router.get('/callback', async (req: Request, res: Response) => {
       return res.status(500).json({ error: 'Failed to get access token' });
     }
 
-    // Fetch shop info
-    const shopInfoRes = await fetch(`https://${shop}/admin/api/2024-01/shop.json`, {
-      headers: { 'X-Shopify-Access-Token': accessToken },
+    // Fetch shop info via GraphQL
+    const shopGqlRes = await fetch(`https://${shop}/admin/api/2025-01/graphql.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': accessToken },
+      body: JSON.stringify({ query: '{ shop { name email currencyCode plan { displayName } timezoneAbbreviation } }' }),
     });
-    const shopInfo: any = await shopInfoRes.json();
+    const shopGql: any = await shopGqlRes.json();
+    const shopData = shopGql?.data?.shop || {};
 
     // Upsert shop record
     await prisma.shop.upsert({
@@ -93,16 +96,16 @@ router.get('/callback', async (req: Request, res: Response) => {
       create: {
         shopDomain: shop as string,
         accessToken,
-        name: shopInfo.shop?.name || shop,
-        email: shopInfo.shop?.email,
-        plan: shopInfo.shop?.plan_name,
-        currency: shopInfo.shop?.currency || 'USD',
-        timezone: shopInfo.shop?.iana_timezone,
+        name: shopData.name || shop,
+        email: shopData.email,
+        plan: shopData.plan?.displayName,
+        currency: shopData.currencyCode || 'USD',
+        timezone: shopData.timezoneAbbreviation,
       },
       update: {
         accessToken,
-        name: shopInfo.shop?.name || shop,
-        email: shopInfo.shop?.email,
+        name: shopData.name || shop,
+        email: shopData.email,
         isActive: true,
         uninstalledAt: null,
       },

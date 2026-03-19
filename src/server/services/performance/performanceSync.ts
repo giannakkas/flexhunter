@@ -25,24 +25,19 @@ export async function syncPerformance(shopId: string): Promise<{ synced: number;
     if (!imp.shopifyProductId) continue;
 
     try {
-      // Fetch product from Shopify to check status
-      const res = await fetch(
-        `https://${shop.shopDomain}/admin/api/2024-01/products/${imp.shopifyProductId}.json`,
-        { headers: { 'X-Shopify-Access-Token': shop.accessToken! } }
-      );
+      // Fetch product from Shopify via GraphQL
+      const { fetchShopifyProduct } = await import('../shopify/shopifyClient');
+      const gid = imp.shopifyProductGid || `gid://shopify/Product/${imp.shopifyProductId}`;
+      const product = await fetchShopifyProduct(shop.shopDomain, shop.accessToken!, gid);
 
-      if (!res.ok) {
-        if (res.status === 404) {
-          // Product deleted from Shopify
-          await prisma.importedProduct.update({
-            where: { id: imp.id },
-            data: { shopifyStatus: 'DELETED' },
-          });
-        }
+      if (!product) {
+        // Product deleted from Shopify
+        await prisma.importedProduct.update({
+          where: { id: imp.id },
+          data: { shopifyStatus: 'DELETED' },
+        });
         continue;
       }
-
-      const { product } = await res.json();
 
       // Calculate health score based on available data
       const daysSinceImport = Math.floor((Date.now() - new Date(imp.importedAt).getTime()) / 86400000);

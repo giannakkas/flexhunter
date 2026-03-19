@@ -147,7 +147,7 @@ export async function registerWebhooks(shopDomain: string, accessToken: string):
         }
       `;
 
-      const res = await fetch(`https://${shopDomain}/admin/api/2024-01/graphql.json`, {
+      const res = await fetch(`https://${shopDomain}/admin/api/2025-01/graphql.json`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

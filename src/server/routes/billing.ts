@@ -24,24 +24,52 @@ async function getShopWithToken(req: Request) {
   return shop;
 }
 
+// Get current plan and usage for a shop
+async function getShopPlanAndUsage(shopId: string) {
+  const shop = await prisma.shop.findUnique({ where: { id: shopId } });
+  const plan = (shop as any)?.billingPlan || 'free';
+  const planData = PLANS[plan as keyof typeof PLANS] || PLANS.free;
+  
+  // Count usage this billing period (last 30 days)
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const researches = await prisma.jobRun.count({
+    where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'COMPLETED', createdAt: { gte: thirtyDaysAgo } },
+  });
+  const imports = await prisma.importedProduct.count({
+    where: { shopId, importedAt: { gte: thirtyDaysAgo } },
+  });
+  
+  return { plan, planData, usage: { researches, imports } };
+}
+
+// Billing enforcement middleware — check limits before research/import
+export async function checkBillingLimit(shopId: string, action: 'research' | 'import'): Promise<{ allowed: boolean; message?: string }> {
+  const { plan, planData, usage } = await getShopPlanAndUsage(shopId);
+  
+  if (action === 'research') {
+    if (planData.researches !== -1 && usage.researches >= planData.researches) {
+      return { allowed: false, message: `Research limit reached (${usage.researches}/${planData.researches} this month). Upgrade to ${plan === 'free' ? 'Starter' : 'Pro'} for more.` };
+    }
+  }
+  if (action === 'import') {
+    if (planData.imports !== -1 && usage.imports >= planData.imports) {
+      return { allowed: false, message: `Import limit reached (${usage.imports}/${planData.imports} this month). Upgrade to ${plan === 'free' ? 'Starter' : 'Pro'} for more.` };
+    }
+  }
+  return { allowed: true };
+}
+
 // ── Get current plan ──────────────────────────
 router.get('/billing/plan', async (req: Request, res: Response) => {
   try {
     const shop = await getShopWithToken(req);
-    // For now, return free plan (billing not enforced yet)
+    const { plan, planData, usage } = await getShopPlanAndUsage(shop.id);
     res.json({
       success: true,
-      data: {
-        plan: 'free',
-        ...PLANS.free,
-        usage: {
-          researches: 0, // TODO: count from jobRun
-          imports: 0,    // TODO: count from importedProduct
-        },
-      },
+      data: { plan, ...planData, usage },
     });
   } catch (err: any) {
-    res.json({ success: true, data: { plan: 'free', ...PLANS.free } });
+    res.json({ success: true, data: { plan: 'free', ...PLANS.free, usage: { researches: 0, imports: 0 } } });
   }
 });
 
@@ -83,7 +111,7 @@ router.post('/billing/subscribe', async (req: Request, res: Response) => {
       }
     `;
 
-    const gqlRes = await fetch(`https://${shop.shopDomain}/admin/api/2024-01/graphql.json`, {
+    const gqlRes = await fetch(`https://${shop.shopDomain}/admin/api/2025-01/graphql.json`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

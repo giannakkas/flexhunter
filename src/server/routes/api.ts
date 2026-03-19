@@ -556,6 +556,13 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     const shopId = await getOrCreateShop(req);
     console.log(`[Research] POST /research/start for shop ${shopId}`);
 
+    // Billing check
+    const { checkBillingLimit } = await import('./billing');
+    const billingCheck = await checkBillingLimit(shopId, 'research');
+    if (!billingCheck.allowed) {
+      return res.json({ success: false, error: billingCheck.message });
+    }
+
     // Check if Store DNA is configured
     const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
     if (!settings?.storeDescription) {
@@ -729,6 +736,13 @@ router.post('/candidates/:id/approve', importRateLimit, async (req: Request, res
     const shopId = await getOrCreateShop(req);
     const { id } = req.params;
     const { customTitle, customPrice, customDescription } = req.body || {};
+
+    // Billing check
+    const { checkBillingLimit } = await import('./billing');
+    const billingCheck = await checkBillingLimit(shopId, 'import');
+    if (!billingCheck.allowed) {
+      return res.json({ success: false, error: billingCheck.message });
+    }
 
     const candidate = await prisma.candidateProduct.findUniqueOrThrow({
       where: { id },
@@ -1038,12 +1052,10 @@ router.delete('/imports/:id', async (req: Request, res: Response) => {
       try {
         const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
         if (shop.accessToken && shop.accessToken !== 'pending') {
-          const url = `https://${shop.shopDomain}/admin/api/2024-01/products/${imported.shopifyProductId}.json`;
-          const r = await fetch(url, {
-            method: 'DELETE',
-            headers: { 'X-Shopify-Access-Token': shop.accessToken },
-          });
-          console.log(`[Import] Shopify delete ${imported.shopifyProductId}: ${r.status}`);
+          const { deleteShopifyProduct } = await import('../services/shopify/shopifyClient');
+          const gid = imported.shopifyProductGid || `gid://shopify/Product/${imported.shopifyProductId}`;
+          await deleteShopifyProduct(shop.shopDomain, shop.accessToken, gid);
+          console.log(`[Import] Shopify delete ${imported.shopifyProductId}: OK (GraphQL)`);
         }
       } catch (err: any) {
         console.warn(`[Import] Shopify delete failed (continuing): ${err.message}`);
@@ -1099,16 +1111,15 @@ router.delete('/imports', async (req: Request, res: Response) => {
       select: { id: true, shopifyProductId: true, shopifyStatus: true, candidateId: true, importedTitle: true },
     });
 
-    // Delete from Shopify
+    // Delete from Shopify via GraphQL
     const shop = await prisma.shop.findUniqueOrThrow({ where: { id: shopId } });
     if (shop.accessToken && shop.accessToken !== 'pending') {
+      const { deleteShopifyProduct } = await import('../services/shopify/shopifyClient');
       for (const imp of allImports) {
         if (imp.shopifyProductId && imp.shopifyStatus !== 'MOCK') {
           try {
-            await fetch(`https://${shop.shopDomain}/admin/api/2024-01/products/${imp.shopifyProductId}.json`, {
-              method: 'DELETE',
-              headers: { 'X-Shopify-Access-Token': shop.accessToken },
-            });
+            const gid = `gid://shopify/Product/${imp.shopifyProductId}`;
+            await deleteShopifyProduct(shop.shopDomain, shop.accessToken, gid);
           } catch {}
         }
       }

@@ -11,6 +11,7 @@ import { config } from './config';
 import authRoutes from './routes/auth';
 import apiRoutes from './routes/api';
 import webhookRoutes from './routes/webhooks';
+import { gdprRouter } from './routes/webhooks';
 import billingRoutes from './routes/billing';
 import adminRoutes from './routes/admin';
 import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
@@ -48,6 +49,18 @@ app.use('/api', requestTimeout(30_000));
 // Security: input sanitization
 app.use(sanitizeInput);
 
+// Security: Shopify App Store required headers (anti-clickjacking)
+app.use((req, res, next) => {
+  // Content-Security-Policy: allow embedding only in Shopify admin
+  res.setHeader('Content-Security-Policy', "frame-ancestors https://*.myshopify.com https://admin.shopify.com;");
+  // Additional security headers
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  next();
+});
+
 // ── Routes ─────────────────────────────────────
 
 // Shopify auth (rate limited: 10/min)
@@ -55,6 +68,9 @@ app.use('/api/auth', authRateLimit, authRoutes);
 
 // Webhooks (before API routes, no rate limit — Shopify controls the rate)
 app.use('/api', webhookRoutes);
+
+// GDPR mandatory webhooks
+app.use('/api', gdprRouter);
 
 // Billing
 app.use('/api', billingRoutes);
