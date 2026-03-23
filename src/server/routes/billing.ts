@@ -9,10 +9,10 @@ import prisma from '../utils/db';
 const router = Router();
 
 const PLANS = {
-  free: { name: 'Free', price: 0, researches: 3, imports: 5 },
-  starter: { name: 'Starter', price: 19.99, researches: 20, imports: 50 },
-  pro: { name: 'Pro', price: 49.99, researches: -1, imports: -1 },       // unlimited
-  enterprise: { name: 'Enterprise', price: 99.99, researches: -1, imports: -1 },
+  free: { name: 'Free', price: 0, researches: 3, imports: 3 },
+  starter: { name: 'Starter', price: 6.99, researches: 20, imports: 50 },
+  pro: { name: 'Pro', price: 19.99, researches: -1, imports: -1 },       // unlimited
+  enterprise: { name: 'Enterprise', price: 0, researches: -1, imports: -1, contactUs: true },
 };
 
 async function getShopWithToken(req: Request) {

@@ -13,13 +13,13 @@ const PLANS = [
     price: 0,
     icon: '🆓',
     color: '#6B7280',
-    features: ['3 research runs / month', '5 product imports', 'Basic scoring', 'SEO optimizer'],
+    features: ['3 research runs / month', '3 product imports / month', 'Basic scoring', 'SEO optimizer'],
     cta: 'Current Plan',
   },
   {
     key: 'starter',
     name: 'Starter',
-    price: 19.99,
+    price: 6.99,
     icon: '🚀',
     color: '#3B82F6',
     popular: false,
@@ -29,7 +29,7 @@ const PLANS = [
   {
     key: 'pro',
     name: 'Pro',
-    price: 49.99,
+    price: 19.99,
     icon: '⚡',
     color: '#8B5CF6',
     popular: true,
@@ -39,11 +39,11 @@ const PLANS = [
   {
     key: 'enterprise',
     name: 'Enterprise',
-    price: 99.99,
+    price: -1,
     icon: '🏢',
     color: '#059669',
     features: ['Everything in Pro', 'Multi-store support', 'Custom AI training', 'White-glove onboarding', 'Dedicated account manager', 'API access'],
-    cta: 'Contact Sales',
+    cta: 'Contact Us',
   },
 ];
 
@@ -101,9 +101,10 @@ export function PlansPage() {
                       <Text as="h2" variant="headingLg">{plan.name}</Text>
                       <div style={{ marginTop: 8 }}>
                         <span style={{ fontSize: 36, fontWeight: 800, color: '#111827' }}>
-                          ${plan.price}
+                          {plan.price === -1 ? 'Custom' : `$${plan.price}`}
                         </span>
                         {plan.price > 0 && <span style={{ fontSize: 14, color: '#6B7280' }}>/mo</span>}
+                        {plan.price === 0 && <span style={{ fontSize: 14, color: '#6B7280' }}> forever</span>}
                       </div>
                     </div>
 
