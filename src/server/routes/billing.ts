@@ -10,7 +10,7 @@ const router = Router();
 
 const PLANS = {
   free: { name: 'Free', price: 0, researches: 3, imports: 3 },
-  starter: { name: 'Starter', price: 6.99, researches: 20, imports: 50 },
+  starter: { name: 'Starter', price: 6.99, researches: 5, imports: 10 },
   pro: { name: 'Pro', price: 19.99, researches: -1, imports: -1 },       // unlimited
   enterprise: { name: 'Enterprise', price: 0, researches: -1, imports: -1, contactUs: true },
 };

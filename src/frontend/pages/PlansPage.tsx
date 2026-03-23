@@ -23,7 +23,7 @@ const PLANS = [
     icon: '🚀',
     color: '#3B82F6',
     popular: false,
-    features: ['20 research runs / month', '50 product imports', '6-agent AI scoring', 'Viral prediction', 'SEO optimizer', 'Performance tracking'],
+    features: ['5 research runs / month', '10 product imports', '6-agent AI scoring', 'Viral prediction', 'SEO optimizer', 'Performance tracking'],
     cta: 'Upgrade',
   },
   {
