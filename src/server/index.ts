@@ -184,7 +184,7 @@ a{color:#007ACE}p{margin:12px 0}
 
 <h2>9. Contact</h2>
 <p>For privacy-related questions, data requests, or concerns:</p>
-<p>Email: <a href="mailto:privacy@flexhunter.app">privacy@flexhunter.app</a></p>
+<p>Email: <a href="mailto:info@flexhunter.app">info@flexhunter.app</a></p>
 <p>FlexHunter is operated by Christos Giannakkas, based in Cyprus.</p>
 
 <a class="back" href="/">← Back to FlexHunter</a>
@@ -236,7 +236,7 @@ a{color:#007ACE}p{margin:12px 0}
 <p>We may update these terms from time to time. Continued use of FlexHunter after changes constitutes acceptance of the revised terms.</p>
 
 <h2>10. Contact</h2>
-<p>Email: <a href="mailto:support@flexhunter.app">support@flexhunter.app</a></p>
+<p>Email: <a href="mailto:info@flexhunter.app">info@flexhunter.app</a></p>
 <p>FlexHunter is operated by Christos Giannakkas, based in Cyprus.</p>
 
 <a class="back" href="/">← Back to FlexHunter</a>
