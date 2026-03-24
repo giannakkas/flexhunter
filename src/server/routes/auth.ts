@@ -135,6 +135,9 @@ router.get('/callback', async (req: Request, res: Response) => {
       console.warn(`[Auth] Webhook registration failed: ${err.message}`);
     }
 
+    // Set session cookie so the app catch-all allows access
+    res.cookie('shopDomain', shop, { httpOnly: true, sameSite: 'none', secure: true, maxAge: 30 * 24 * 60 * 60 * 1000 });
+
     // Redirect to app
     res.redirect(`https://${shop}/admin/apps/${config.shopify.apiKey}`);
   } catch (err) {

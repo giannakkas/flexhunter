@@ -248,20 +248,49 @@ if (!config.isDev) {
   const frontendPath = path.join(__dirname, '../../dist/frontend');
   const publicPath = path.join(__dirname, '../../public');
   
-  // Landing page for direct visitors FIRST (before static serves index.html)
+  // Public pages — accessible to everyone
+  const publicRoutes = new Set(['/', '/privacy', '/terms', '/health', '/setup']);
+  
+  // Landing page for direct visitors
   app.get('/', (req, res, next) => {
     const isShopify = req.query.shop || req.query.host || req.headers['x-shop-domain'] || req.query.hmac;
-    if (isShopify) return next(); // Let React app handle Shopify embedded
+    if (isShopify) return next();
     res.sendFile(path.join(publicPath, 'landing.html'));
   });
 
-  // Static assets (JS/CSS/images) — but NOT index.html at root
+  // Static assets (JS/CSS/images)
   app.use(express.static(publicPath));
   app.use(express.static(frontendPath, { index: false }));
   
-  // All other routes → React app (SPA catch-all)
-  app.get('*', (_req, res) => {
-    res.sendFile(path.join(frontendPath, 'index.html'));
+  // App routes — only serve React app if coming from Shopify
+  app.get('*', (req, res) => {
+    // Allow public routes
+    if (publicRoutes.has(req.path)) {
+      return res.sendFile(path.join(frontendPath, 'index.html'));
+    }
+    
+    // Allow static file requests (JS, CSS, images, fonts)
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|svg|ico|woff|woff2|ttf|map)$/)) {
+      return res.sendFile(path.join(frontendPath, 'index.html'));
+    }
+    
+    // Check for Shopify context (embedded app or OAuth flow)
+    const isShopify = req.query.shop || req.query.host || req.query.hmac || 
+                      req.headers['x-shop-domain'] || req.query.id_token;
+    
+    // Check for Shopify session cookie (set during OAuth)
+    const hasSession = req.cookies?.shopifySession || req.cookies?.shopDomain;
+    
+    // Check referer — if coming from Shopify admin, allow
+    const referer = req.headers.referer || '';
+    const fromShopify = referer.includes('myshopify.com') || referer.includes('admin.shopify.com');
+    
+    if (isShopify || hasSession || fromShopify) {
+      return res.sendFile(path.join(frontendPath, 'index.html'));
+    }
+    
+    // Not authenticated — redirect to landing page
+    res.redirect('/');
   });
 }
 

@@ -22,7 +22,7 @@ const router = Router();
 // ── Middleware: Get or create shop ──────────────
 
 async function getOrCreateShop(req: Request): Promise<string> {
-  // Try shop domain from header
+  // Try shop domain from header (set by Shopify App Bridge)
   let shopDomain = req.headers['x-shop-domain'] as string;
 
   // Fallback to old header
@@ -31,7 +31,12 @@ async function getOrCreateShop(req: Request): Promise<string> {
     if (shopId && shopId !== 'dev-shop-id') return shopId;
   }
 
-  // If domain is unknown, find the shop with a real token (standalone mode)
+  // Fallback: try cookie set during OAuth
+  if (!shopDomain || shopDomain === 'unknown') {
+    shopDomain = req.cookies?.shopDomain;
+  }
+
+  // If still no domain, find the most recently active shop (standalone/dev mode)
   if (!shopDomain || shopDomain === 'unknown') {
     const shopWithToken = await prisma.shop.findFirst({
       where: { accessToken: { not: 'pending' }, isActive: true },
@@ -39,11 +44,7 @@ async function getOrCreateShop(req: Request): Promise<string> {
     });
     if (shopWithToken) return shopWithToken.id;
 
-    // Last resort: any shop
-    const anyShop = await prisma.shop.findFirst({ orderBy: { createdAt: 'desc' } });
-    if (anyShop) return anyShop.id;
-
-    throw new Error('Unable to identify shop. Please reload the app.');
+    throw new Error('No authenticated shop found. Please install FlexHunter from the Shopify App Store.');
   }
 
   // Ensure .myshopify.com suffix
