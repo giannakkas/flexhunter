@@ -338,26 +338,39 @@ Return JSON: {"relevant": [array of index numbers]}`;
   
   // Keyword-based fallback when AI is unavailable
   console.warn('[RelevanceFilter] Using keyword fallback');
-  const storeWords = storeDescription.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  // Extract meaningful niche words (exclude very generic ones)
+  const genericWords = new Set(['with', 'from', 'that', 'this', 'have', 'your', 'they', 'will', 'about', 'made', 'high', 'quality', 'best', 'good', 'great', 'product', 'products', 'store', 'shop', 'sell', 'sale', 'item', 'items', 'offer', 'collection', 'curated', 'selection', 'modern', 'featuring', 'designed', 'compact', 'multi', 'functional', 'premium', 'affordable', 'unique', 'special', 'tools', 'gear', 'equipment', 'accessories']);
+  const storeWords = storeDescription.toLowerCase().split(/[\s,.\-;:]+/).filter(w => w.length > 3 && !genericWords.has(w));
   if (storeWords.length === 0) return products.map((_, i) => i);
   
   const relevant: number[] = [];
   for (let i = 0; i < products.length; i++) {
     const text = (products[i].title + ' ' + (products[i].category || '') + ' ' + (products[i].description || '')).toLowerCase();
-    // Product must match at least 1 store keyword
-    if (storeWords.some(w => text.includes(w))) {
+    // Product must match at least 2 store keywords for strong relevance
+    const matches = storeWords.filter(w => text.includes(w));
+    if (matches.length >= 2) {
       relevant.push(i);
     }
   }
   
-  console.log(`[RelevanceFilter] Keyword fallback: ${products.length} → ${relevant.length} (keywords: ${storeWords.slice(0, 5).join(', ')})`);
-  
-  // If keyword filter is too strict, return top half by order volume
+  // If strict filter got too few, try with 1 keyword match
   if (relevant.length < 5 && products.length >= 10) {
-    console.warn('[RelevanceFilter] Keyword filter too strict — returning top by orders');
+    for (let i = 0; i < products.length; i++) {
+      if (relevant.includes(i)) continue;
+      const text = (products[i].title + ' ' + (products[i].category || '') + ' ' + (products[i].description || '')).toLowerCase();
+      const matches = storeWords.filter(w => text.includes(w));
+      if (matches.length >= 1) relevant.push(i);
+    }
+  }
+  
+  console.log(`[RelevanceFilter] Keyword fallback: ${products.length} → ${relevant.length} (keywords: ${storeWords.slice(0, 8).join(', ')})`);
+  
+  // If keyword filter is STILL too strict, return top by orders but limit to 30%
+  if (relevant.length < 3 && products.length >= 10) {
+    console.warn('[RelevanceFilter] Keyword filter too strict — returning top by orders (capped at 30%)');
     const byOrders = products.map((p, i) => ({ i, orders: p.orderVolume || 0 }))
       .sort((a, b) => b.orders - a.orders)
-      .slice(0, Math.ceil(products.length * 0.5))
+      .slice(0, Math.ceil(products.length * 0.3))
       .map(x => x.i);
     return byOrders;
   }

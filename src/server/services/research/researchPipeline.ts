@@ -428,14 +428,19 @@ export async function runResearchPipeline(shopId: string): Promise<ResearchResul
     
     // Filter out products with terrible niche fit
     const beforeFilter = scored.length;
-    scored = scored.filter(p => p.agentScore.storeFit.score >= 30);
-    if (scored.length < 5 && beforeFilter > 5) {
-      // If too aggressive, keep top by score
-      scored = scored.concat(
-        relevant.slice(0, maxCandidates)
-          .map(p => scored.find(s => s.providerProductId === p.providerProductId))
-          .filter(Boolean) as any[]
-      ).slice(0, maxCandidates);
+    scored = scored.filter(p => p.agentScore.storeFit.score >= 40);
+    if (scored.length < 3 && beforeFilter > 3) {
+      // If too aggressive, take top by final score
+      scored = relevant.slice(0, maxCandidates)
+        .map(p => scored.find(s => s.providerProductId === p.providerProductId) || null)
+        .filter(Boolean) as any[];
+      if (scored.length === 0) {
+        // Really nothing matches — take highest scored from original batch
+        scored = relevant.slice(0, Math.min(5, maxCandidates)).map(p => ({
+          ...p,
+          agentScore: { storeFit: { score: 30, confidence: 0.1, reasoning: 'Low niche match', signals: [] }, profitability: { score: 50, confidence: 0.5, reasoning: 'Basic', signals: [] }, trendPotential: { score: 50, confidence: 0.3, reasoning: 'Unknown', signals: [] }, viralPrediction: { viralScore: 30, trendStage: 'stable_trend' as any, velocity7d: 0, accelerationRate: 1, confidence: 0.1, signals: ['Fallback'], explanation: 'Low match' }, saturation: { score: 50, confidence: 0.1, reasoning: 'Unknown', signals: [] }, supplierQuality: { score: 50, confidence: 0.5, reasoning: 'Basic', signals: [] }, finalScore: 35, recommendation: 'skip' as any, explanation: 'Low niche match — AI scoring unavailable' },
+        }));
+      }
     }
     
     scored.sort((a, b) => b.agentScore.finalScore - a.agentScore.finalScore);
