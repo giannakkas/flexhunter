@@ -249,7 +249,7 @@ if (!config.isDev) {
   const publicPath = path.join(__dirname, '../../public');
   
   // Public pages — accessible to everyone without auth
-  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup']);
+  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin']);
   
   // Landing page for direct visitors
   app.get('/', (req, res, next) => {
