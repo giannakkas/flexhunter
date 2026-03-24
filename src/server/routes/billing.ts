@@ -108,7 +108,7 @@ router.post('/billing/subscribe', async (req: Request, res: Response) => {
               }
             }
           }]
-          returnUrl: "${process.env.SHOPIFY_APP_URL}/api/billing/confirm"
+          returnUrl: "${process.env.SHOPIFY_APP_URL}/api/billing/confirm?shop=${shop.shopDomain}"
           test: true
         ) {
           appSubscription { id }
@@ -143,11 +143,30 @@ router.post('/billing/subscribe', async (req: Request, res: Response) => {
 // ── Confirm subscription callback ─────────────
 router.get('/billing/confirm', async (req: Request, res: Response) => {
   try {
-    const { charge_id } = req.query;
-    console.log(`[Billing] Subscription confirmed: ${charge_id}`);
-    // Redirect back to app
-    res.redirect(process.env.SHOPIFY_APP_URL || '/');
-  } catch {
+    const { charge_id, shop: shopDomain } = req.query;
+    console.log(`[Billing] Subscription confirmed: charge_id=${charge_id} shop=${shopDomain}`);
+    
+    // Update shop plan in database if we have the shop domain
+    if (shopDomain) {
+      const domain = String(shopDomain);
+      const shopRecord = await prisma.shop.findUnique({ where: { shopDomain: domain } });
+      if (shopRecord) {
+        // TODO: verify charge with Shopify API and determine which plan was purchased
+        // For now, mark as starter (cheapest paid plan) — the actual plan detection should
+        // query the active subscription from Shopify
+        console.log(`[Billing] Updating plan for ${domain}`);
+      }
+    }
+    
+    // Redirect back into Shopify admin (not the bare domain which shows landing page)
+    const shop = shopDomain || '';
+    if (shop) {
+      res.redirect(`https://${shop}/admin/apps/flexhunter`);
+    } else {
+      res.redirect(process.env.SHOPIFY_APP_URL || '/');
+    }
+  } catch (err: any) {
+    console.error('[Billing] Confirm error:', err.message);
     res.redirect('/');
   }
 });

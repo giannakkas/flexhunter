@@ -1,5 +1,6 @@
 import { friendlyError } from '../utils/errors';
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Page, Card, BlockStack, Text, Badge, Button, InlineStack,
   EmptyState, Modal, Divider, Spinner, Banner, TextField,
@@ -243,6 +244,7 @@ const _poll = {
 };
 
 export function CandidatesPage() {
+  const navigate = useNavigate();
   const { data: candidates, get, loading, setData } = useApi<any[]>();
   const [preview, setPreview] = useState<any>(null);
   const [scoreItem, setScoreItem] = useState<any>(null);
@@ -633,7 +635,7 @@ export function CandidatesPage() {
             <BlockStack gap="200">
               <Text as="p" fontWeight="semibold">{billingError}</Text>
               <InlineStack gap="200">
-                <Button url="/plans" size="slim">View Plans & Upgrade</Button>
+                <Button onClick={() => navigate('/plans')} size="slim">View Plans & Upgrade</Button>
               </InlineStack>
             </BlockStack>
           </Banner>
