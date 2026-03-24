@@ -32,7 +32,7 @@ export const config = {
   shopify: {
     apiKey: requireEnv('SHOPIFY_API_KEY', 'dev-key'),
     apiSecret: requireEnv('SHOPIFY_API_SECRET', 'dev-secret'),
-    scopes: optionalEnv('SHOPIFY_SCOPES', 'read_products,write_products,read_orders').split(','),
+    scopes: optionalEnv('SHOPIFY_SCOPES', 'read_products,write_products,read_orders,read_reports').split(','),
     appUrl: optionalEnv('SHOPIFY_APP_URL', 'http://localhost:3000'),
     authCallbackPath: optionalEnv('SHOPIFY_AUTH_CALLBACK_PATH', '/api/auth/callback'),
   },

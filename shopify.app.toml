@@ -13,7 +13,7 @@ embedded = true
 
 [access_scopes]
   # Only request scopes your app actually uses
-  scopes = "read_products,write_products,read_orders"
+  scopes = "read_products,write_products,read_orders,read_reports"
 
 [auth]
   redirect_urls = [
