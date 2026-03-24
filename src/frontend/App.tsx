@@ -79,39 +79,39 @@ function ShopifyGuard({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const isAdmin = window.location.pathname === '/admin';
+
   return (
     <AppProvider i18n={enTranslations}>
       <ErrorBoundary>
         <BrowserRouter>
-          <Routes>
-            {/* Admin — standalone, no sidebar, has own password protection */}
-            <Route path="/admin" element={<AdminPage />} />
-            
-            {/* All other routes — require Shopify context + show app frame */}
-            <Route path="*" element={
-              <ShopifyGuard>
-                <AppFrame>
-                  <ErrorBoundary>
-                    <Routes>
-                      <Route path="/" element={<DashboardPage />} />
-                      <Route path="/onboarding" element={<OnboardingPage />} />
-                      <Route path="/research" element={<ResearchPage />} />
-                      <Route path="/candidates" element={<CandidatesPage />} />
-                      <Route path="/selections" element={<SelectionsPage />} />
-                      <Route path="/imports" element={<ImportsPage />} />
-                      <Route path="/seo" element={<SeoPage />} />
-                      <Route path="/plans" element={<PlansPage />} />
-                      <Route path="/trends" element={<TrendsPage />} />
-                      <Route path="/replacements" element={<ReplacementsPage />} />
-                      <Route path="/settings" element={<SettingsPage />} />
-                      <Route path="/audit" element={<AuditPage />} />
-                      <Route path="*" element={<Navigate to="/" />} />
-                    </Routes>
-                  </ErrorBoundary>
-                </AppFrame>
-              </ShopifyGuard>
-            } />
-          </Routes>
+          {isAdmin ? (
+            <Routes>
+              <Route path="/admin" element={<AdminPage />} />
+            </Routes>
+          ) : (
+            <ShopifyGuard>
+              <AppFrame>
+                <ErrorBoundary>
+                  <Routes>
+                    <Route path="/" element={<DashboardPage />} />
+                    <Route path="/onboarding" element={<OnboardingPage />} />
+                    <Route path="/research" element={<ResearchPage />} />
+                    <Route path="/candidates" element={<CandidatesPage />} />
+                    <Route path="/selections" element={<SelectionsPage />} />
+                    <Route path="/imports" element={<ImportsPage />} />
+                    <Route path="/seo" element={<SeoPage />} />
+                    <Route path="/plans" element={<PlansPage />} />
+                    <Route path="/trends" element={<TrendsPage />} />
+                    <Route path="/replacements" element={<ReplacementsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/audit" element={<AuditPage />} />
+                    <Route path="*" element={<Navigate to="/" />} />
+                  </Routes>
+                </ErrorBoundary>
+              </AppFrame>
+            </ShopifyGuard>
+          )}
         </BrowserRouter>
       </ErrorBoundary>
     </AppProvider>
