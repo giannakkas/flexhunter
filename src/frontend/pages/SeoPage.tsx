@@ -31,6 +31,48 @@ export function SeoPage() {
   const [seo, setSeo] = useState<SeoResult | null>(null);
   const [edited, setEdited] = useState<Partial<SeoResult>>({});
   const [message, setMessage] = useState<{ text: string; tone: 'success' | 'critical' } | null>(null);
+  const [planGated, setPlanGated] = useState(false);
+  const [planLoading, setPlanLoading] = useState(true);
+
+  // Check plan access on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await apiFetch<any>('/billing/plan');
+        const plan = r?.data?.plan || 'free';
+        if (plan === 'free' || plan === 'starter') setPlanGated(true);
+      } catch {}
+      setPlanLoading(false);
+    })();
+  }, []);
+
+  if (planLoading) {
+    return <Page title="SEO Optimization"><Card><div style={{ textAlign: 'center', padding: 40 }}><Spinner /></div></Card></Page>;
+  }
+
+  if (planGated) {
+    return (
+      <Page title="SEO Optimization" backAction={{ content: 'Back', onAction: () => navigate('/imports') }}>
+        <Card>
+          <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+            <BlockStack gap="400">
+              <div style={{ fontSize: 48 }}>⚡</div>
+              <Text as="h2" variant="headingLg">SEO Optimizer is a Pro Feature</Text>
+              <Text as="p" tone="subdued">
+                Unlock AI-powered SEO optimization to boost your product visibility, generate optimized titles, descriptions, meta tags, and keywords — all with one click.
+              </Text>
+              <div style={{ marginTop: 12 }}>
+                <Button variant="primary" size="large" onClick={() => navigate('/plans')}>
+                  Upgrade to Pro — $19.99/mo
+                </Button>
+              </div>
+              <Text as="p" variant="bodySm" tone="subdued">Includes unlimited research, unlimited imports, and all premium features.</Text>
+            </BlockStack>
+          </div>
+        </Card>
+      </Page>
+    );
+  }
 
   const runOptimization = async (id: string) => {
     setLoading(true);

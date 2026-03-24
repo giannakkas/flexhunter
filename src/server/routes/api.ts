@@ -1688,6 +1688,14 @@ router.post('/fix-token', async (req: Request, res: Response) => {
 router.post('/seo/optimize/:importedProductId', seoRateLimit, async (req: Request, res: Response) => {
   try {
     const shopId = await getOrCreateShop(req);
+
+    // SEO is Pro+ only
+    const { checkBillingLimit } = await import('./billing');
+    const check = await checkBillingLimit(shopId, 'seo');
+    if (!check.allowed) {
+      return res.json({ success: false, error: check.message });
+    }
+
     const { importedProductId } = req.params;
 
     const imported = await prisma.importedProduct.findUniqueOrThrow({

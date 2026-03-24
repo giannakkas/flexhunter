@@ -43,9 +43,14 @@ async function getShopPlanAndUsage(shopId: string) {
 }
 
 // Billing enforcement middleware — check limits before research/import
-export async function checkBillingLimit(shopId: string, action: 'research' | 'import'): Promise<{ allowed: boolean; message?: string }> {
+export async function checkBillingLimit(shopId: string, action: 'research' | 'import' | 'seo'): Promise<{ allowed: boolean; message?: string }> {
   const { plan, planData, usage } = await getShopPlanAndUsage(shopId);
   
+  if (action === 'seo') {
+    if (plan === 'free' || plan === 'starter') {
+      return { allowed: false, message: 'SEO Optimizer is available on Pro and above. Upgrade to unlock AI-powered SEO optimization.' };
+    }
+  }
   if (action === 'research') {
     if (planData.researches !== -1 && usage.researches >= planData.researches) {
       return { allowed: false, message: `Research limit reached (${usage.researches}/${planData.researches} this month). Upgrade to ${plan === 'free' ? 'Starter' : 'Pro'} for more.` };

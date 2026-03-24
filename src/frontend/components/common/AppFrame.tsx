@@ -44,7 +44,7 @@ export function AppFrame({ children }: { children: React.ReactNode }) {
         title="Optimize"
         items={[
           { label: 'Trend Intelligence', icon: SearchIcon, onClick: () => navigate('/trends'), selected: location.pathname === '/trends' },
-          { label: 'SEO Optimizer', icon: SearchIcon, onClick: () => navigate('/seo'), selected: location.pathname.startsWith('/seo') },
+          { label: 'SEO Optimizer', icon: SearchIcon, onClick: () => navigate('/seo'), selected: location.pathname.startsWith('/seo'), badge: 'PRO' },
           { label: 'Replacements', icon: RefreshIcon, onClick: () => navigate('/replacements'), selected: location.pathname === '/replacements' },
         ]}
       />

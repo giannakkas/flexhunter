@@ -13,7 +13,7 @@ const PLANS = [
     price: 0,
     icon: '🆓',
     color: '#6B7280',
-    features: ['3 research runs / month', '3 product imports / month', 'Basic scoring', 'SEO optimizer'],
+    features: ['3 research runs / month', '3 product imports / month', 'Basic scoring'],
     cta: 'Current Plan',
   },
   {
@@ -23,7 +23,7 @@ const PLANS = [
     icon: '🚀',
     color: '#3B82F6',
     popular: false,
-    features: ['5 research runs / month', '10 product imports', '6-agent AI scoring', 'Viral prediction', 'SEO optimizer', 'Performance tracking'],
+    features: ['5 research runs / month', '10 product imports', '6-agent AI scoring', 'Viral prediction', 'Performance tracking'],
     cta: 'Upgrade',
   },
   {
