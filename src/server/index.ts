@@ -118,6 +118,43 @@ app.get('/reset-jobs', async (req, res) => {
   res.json({ success: true, stuckCleared: stuck.count, jobsDeleted: completed.count, message: 'Billing usage reset — you can run research again' });
 });
 
+// Test AI connectivity
+app.get('/test-ai', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== config.admin.secret) {
+    return res.status(401).json({ error: 'Add ?secret=YOUR_ADMIN_SECRET' });
+  }
+  const results: any = { providers: {} };
+  
+  // Test DeepSeek
+  if (process.env.DEEPSEEK_API_KEY) {
+    try {
+      const start = Date.now();
+      const r = await fetch('https://api.deepseek.com/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}` },
+        body: JSON.stringify({ model: 'deepseek-chat', messages: [{ role: 'user', content: 'Say "ok" and nothing else' }], max_tokens: 10, temperature: 0 }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const data = await r.json();
+      results.providers.deepseek = { status: r.status, latency: Date.now() - start, response: data.choices?.[0]?.message?.content || data.error || 'no content' };
+    } catch (err: any) {
+      results.providers.deepseek = { error: err.message };
+    }
+  } else {
+    results.providers.deepseek = { error: 'DEEPSEEK_API_KEY not set' };
+  }
+  
+  results.envKeys = {
+    DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY ? `${process.env.DEEPSEEK_API_KEY.slice(0, 8)}...` : 'NOT SET',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'SET' : 'NOT SET',
+    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? 'SET' : 'NOT SET',
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'SET' : 'NOT SET',
+  };
+  
+  res.json(results);
+});
+
 // Direct token setup page - visit /setup in browser
 app.get('/setup', (_req, res) => {
   res.send(`<!DOCTYPE html>
@@ -268,7 +305,7 @@ if (!config.isDev) {
   const publicPath = path.join(__dirname, '../../public');
   
   // Public pages — accessible to everyone without auth
-  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin', '/reset-jobs']);
+  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin', '/reset-jobs', '/test-ai']);
   
   // Landing page for direct visitors
   app.get('/', (req, res, next) => {
