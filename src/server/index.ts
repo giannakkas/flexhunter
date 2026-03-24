@@ -246,7 +246,18 @@ a{color:#007ACE}p{margin:12px 0}
 // Serve frontend in production
 if (!config.isDev) {
   const frontendPath = path.join(__dirname, '../../dist/frontend');
-  app.use(express.static(frontendPath));
+  const publicPath = path.join(__dirname, '../../public');
+  app.use(express.static(publicPath));    // Landing page assets
+  app.use(express.static(frontendPath));  // React app assets
+  
+  // Landing page for direct visitors (flexhunter.app)
+  // Shopify embedded requests have ?shop= or come through /api/
+  app.get('/', (req, res, next) => {
+    const isShopify = req.query.shop || req.query.host || req.headers['x-shop-domain'] || req.query.hmac;
+    if (isShopify) return next(); // Let React app handle Shopify embedded
+    res.sendFile(path.join(publicPath, 'landing.html'));
+  });
+  
   app.get('*', (_req, res) => {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
