@@ -31,9 +31,10 @@ async function getShopPlanAndUsage(shopId: string) {
   const planData = PLANS[plan as keyof typeof PLANS] || PLANS.free;
   
   // Count usage this billing period (last 30 days)
+  // Count ALL research attempts (completed, running, and failed) — not just completed
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const researches = await prisma.jobRun.count({
-    where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'COMPLETED', createdAt: { gte: thirtyDaysAgo } },
+    where: { shopId, jobType: 'RESEARCH_PRODUCTS', createdAt: { gte: thirtyDaysAgo } },
   });
   const imports = await prisma.importedProduct.count({
     where: { shopId, importedAt: { gte: thirtyDaysAgo } },
