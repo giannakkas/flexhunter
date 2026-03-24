@@ -68,7 +68,10 @@ export function SelectionsPage() {
           customDescription: editDesc || undefined,
         }),
       });
-      if (r.shopifyError) {
+      // Check for billing limit
+      if (r.success === false && r.error) {
+        setMsg(`⚠️ ${r.error}`);
+      } else if (r.shopifyError) {
         setMsg(`Warning: ${r.shopifyError}`);
       } else if (r.importedProductId) {
         setSeoModal({ open: true, importedId: r.importedProductId, title: editTitle || '' });

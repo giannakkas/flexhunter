@@ -296,7 +296,10 @@ export function CandidatesPage() {
     })();
   }, []); // eslint-disable-line
 
+  const [billingError, setBillingError] = useState<string | null>(null);
+
   const handleResearch = async () => {
+    setBillingError(null);
     _poll.stop();
     setData([]);
     _poll.running = true; _poll.progress = 2; _poll.stage = '🔑 Starting research...'; _poll.notify();
@@ -304,7 +307,22 @@ export function CandidatesPage() {
     apiFetch('/candidates/reset', { method: 'POST' }).catch(() => {});
 
     try {
-      await apiFetch<any>('/research/start', { method: 'POST' });
+      const result = await apiFetch<any>('/research/start', { method: 'POST' });
+      
+      // Check for billing limit or other server-side rejections
+      if (result.success === false && result.error) {
+        _poll.running = false; _poll.notify();
+        setBillingError(result.error);
+        return;
+      }
+      
+      // Check for "no Store DNA" response
+      if (result.data?.totalFetched === 0 && result.message?.includes('Store DNA')) {
+        _poll.running = false; _poll.notify();
+        setMsg(result.message);
+        return;
+      }
+      
       _poll.start(5);
     } catch (err: any) {
       _poll.running = false; _poll.notify();
@@ -608,6 +626,18 @@ export function CandidatesPage() {
       <style>{GLOW_CSS}</style>
       <BlockStack gap="400">
         {msg && <AutoDismiss message={msg} onDismiss={() => setMsg(null)} />}
+
+        {/* Billing Limit Banner */}
+        {billingError && (
+          <Banner tone="warning" onDismiss={() => setBillingError(null)}>
+            <BlockStack gap="200">
+              <Text as="p" fontWeight="semibold">{billingError}</Text>
+              <InlineStack gap="200">
+                <Button url="/plans" size="slim">View Plans & Upgrade</Button>
+              </InlineStack>
+            </BlockStack>
+          </Banner>
+        )}
 
         {/* Diagnose Results */}
         {diagResults && !diagResults.loading && (
