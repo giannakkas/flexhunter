@@ -99,6 +99,19 @@ app.get('/health', async (_req, res) => {
   });
 });
 
+// Reset stuck research jobs — admin utility
+app.get('/reset-jobs', async (req, res) => {
+  const secret = req.query.secret;
+  if (secret !== config.admin.secret) {
+    return res.status(401).json({ error: 'Add ?secret=YOUR_ADMIN_SECRET' });
+  }
+  const result = await prisma.jobRun.updateMany({
+    where: { jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
+    data: { status: 'FAILED', error: 'Manual reset', completedAt: new Date() },
+  });
+  res.json({ success: true, cleared: result.count });
+});
+
 // Direct token setup page - visit /setup in browser
 app.get('/setup', (_req, res) => {
   res.send(`<!DOCTYPE html>
@@ -249,7 +262,7 @@ if (!config.isDev) {
   const publicPath = path.join(__dirname, '../../public');
   
   // Public pages — accessible to everyone without auth
-  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin']);
+  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin', '/reset-jobs']);
   
   // Landing page for direct visitors
   app.get('/', (req, res, next) => {
