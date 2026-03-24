@@ -17,6 +17,7 @@ import adminRoutes from './routes/admin';
 import { apiRateLimit, authRateLimit, requestTimeout, sanitizeInput } from './middleware/security';
 import { apiMetricsMiddleware } from './middleware/apiMetrics';
 import logger from './utils/logger';
+import prisma from './utils/db';
 
 const app = express();
 
@@ -99,17 +100,22 @@ app.get('/health', async (_req, res) => {
   });
 });
 
-// Reset stuck research jobs — admin utility
+// Reset stuck research jobs + billing usage — admin utility
 app.get('/reset-jobs', async (req, res) => {
   const secret = req.query.secret;
   if (secret !== config.admin.secret) {
     return res.status(401).json({ error: 'Add ?secret=YOUR_ADMIN_SECRET' });
   }
-  const result = await prisma.jobRun.updateMany({
+  // Clear stuck running jobs
+  const stuck = await prisma.jobRun.updateMany({
     where: { jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING' },
     data: { status: 'FAILED', error: 'Manual reset', completedAt: new Date() },
   });
-  res.json({ success: true, cleared: result.count });
+  // Clear completed job runs (resets billing counter)
+  const completed = await prisma.jobRun.deleteMany({
+    where: { jobType: 'RESEARCH_PRODUCTS' },
+  });
+  res.json({ success: true, stuckCleared: stuck.count, jobsDeleted: completed.count, message: 'Billing usage reset — you can run research again' });
 });
 
 // Direct token setup page - visit /setup in browser
