@@ -275,7 +275,6 @@ if (!config.isDev) {
     }
     
     // Shopify embedded app context — REQUIRED for all app routes
-    // Shopify always adds ?shop= and ?host= when loading embedded apps
     const hasShopifyParams = req.query.shop || req.query.host || req.query.hmac || req.query.id_token;
     
     // Also allow if loaded inside Shopify iframe (referer check)
@@ -283,17 +282,16 @@ if (!config.isDev) {
     const fromShopifyAdmin = referer.includes('admin.shopify.com') || 
                               (referer.includes('myshopify.com') && referer.includes('/admin'));
     
-    // Allow if this is an internal SPA navigation from an already-loaded Shopify session
-    // Check X-Requested-With header (set by fetch/XHR from the React app)
-    const isXHR = req.headers['x-requested-with'] === 'XMLHttpRequest' || 
-                  req.headers.accept?.includes('text/html');
-    
     if (hasShopifyParams || fromShopifyAdmin) {
+      res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
       return res.sendFile(path.join(frontendPath, 'index.html'));
     }
     
-    // Not from Shopify — redirect to landing page
-    res.redirect('/');
+    // Not from Shopify — serve redirect page (not res.redirect to avoid caching issues)
+    console.log(`[Access] BLOCKED ${req.path} — no Shopify context (referer: ${referer.slice(0, 50) || 'none'})`);
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.send(`<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0;url=/"><title>Redirecting...</title></head><body><p>Redirecting to <a href="/">FlexHunter</a>...</p><script>window.location.href="/";</script></body></html>`);
   });
 }
 
