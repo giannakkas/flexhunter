@@ -164,9 +164,9 @@ export default router;
 // ==============================================
 // These must be registered in shopify.app.toml:
 //   [webhooks.privacy_compliance]
-//     customer_deletion_url = "https://flexhunter-production.up.railway.app/api/webhooks/gdpr/customers-redact"
-//     customer_data_request_url = "https://flexhunter-production.up.railway.app/api/webhooks/gdpr/customers-data-request"
-//     shop_deletion_url = "https://flexhunter-production.up.railway.app/api/webhooks/gdpr/shop-redact"
+//     customer_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/customers-redact"
+//     customer_data_request_url = "https://flexhunter.app/api/webhooks/gdpr/customers-data-request"
+//     shop_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/shop-redact"
 
 export const gdprRouter = Router();
 
