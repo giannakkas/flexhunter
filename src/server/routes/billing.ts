@@ -27,11 +27,10 @@ async function getShopWithToken(req: Request) {
 // Get current plan and usage for a shop
 async function getShopPlanAndUsage(shopId: string) {
   const shop = await prisma.shop.findUnique({ where: { id: shopId } });
-  const plan = (shop as any)?.billingPlan || 'free';
+  const plan = shop?.plan || 'free';
   const planData = PLANS[plan as keyof typeof PLANS] || PLANS.free;
   
-  // Count usage this billing period (last 30 days)
-  // Count ALL research attempts (completed, running, and failed) — not just completed
+  // Count ALL research attempts in last 30 days
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
   const researches = await prisma.jobRun.count({
     where: { shopId, jobType: 'RESEARCH_PRODUCTS', createdAt: { gte: thirtyDaysAgo } },
@@ -39,6 +38,8 @@ async function getShopPlanAndUsage(shopId: string) {
   const imports = await prisma.importedProduct.count({
     where: { shopId, importedAt: { gte: thirtyDaysAgo } },
   });
+  
+  console.log(`[Billing] Shop ${shopId.slice(0, 8)}... plan=${plan} researches=${researches}/${planData.researches} imports=${imports}/${planData.imports}`);
   
   return { plan, planData, usage: { researches, imports } };
 }
