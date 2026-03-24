@@ -248,12 +248,12 @@ if (!config.isDev) {
   const frontendPath = path.join(__dirname, '../../dist/frontend');
   const publicPath = path.join(__dirname, '../../public');
   
-  // Public pages — accessible to everyone
-  const publicRoutes = new Set(['/', '/privacy', '/terms', '/health', '/setup', '/admin']);
+  // Public pages — accessible to everyone without auth
+  const publicPages = new Set(['/', '/privacy', '/terms', '/health', '/setup']);
   
   // Landing page for direct visitors
   app.get('/', (req, res, next) => {
-    const isShopify = req.query.shop || req.query.host || req.headers['x-shop-domain'] || req.query.hmac;
+    const isShopify = req.query.shop || req.query.host || req.query.hmac;
     if (isShopify) return next();
     res.sendFile(path.join(publicPath, 'landing.html'));
   });
@@ -262,34 +262,37 @@ if (!config.isDev) {
   app.use(express.static(publicPath));
   app.use(express.static(frontendPath, { index: false }));
   
-  // App routes — only serve React app if coming from Shopify
+  // App routes — STRICT Shopify-only access
   app.get('*', (req, res) => {
-    // Allow public routes
-    if (publicRoutes.has(req.path)) {
+    // Public pages always accessible
+    if (publicPages.has(req.path)) {
       return res.sendFile(path.join(frontendPath, 'index.html'));
     }
     
-    // Allow static file requests (JS, CSS, images, fonts)
-    if (req.path.match(/\.(js|css|png|jpg|jpeg|svg|ico|woff|woff2|ttf|map)$/)) {
+    // Static assets always served
+    if (req.path.match(/\.(js|css|png|jpg|jpeg|svg|ico|woff|woff2|ttf|map|json)$/)) {
       return res.sendFile(path.join(frontendPath, 'index.html'));
     }
     
-    // Check for Shopify context (embedded app or OAuth flow)
-    const isShopify = req.query.shop || req.query.host || req.query.hmac || 
-                      req.headers['x-shop-domain'] || req.query.id_token;
+    // Shopify embedded app context — REQUIRED for all app routes
+    // Shopify always adds ?shop= and ?host= when loading embedded apps
+    const hasShopifyParams = req.query.shop || req.query.host || req.query.hmac || req.query.id_token;
     
-    // Check for Shopify session cookie (set during OAuth)
-    const hasSession = req.cookies?.shopifySession || req.cookies?.shopDomain;
-    
-    // Check referer — if coming from Shopify admin, allow
+    // Also allow if loaded inside Shopify iframe (referer check)
     const referer = req.headers.referer || '';
-    const fromShopify = referer.includes('myshopify.com') || referer.includes('admin.shopify.com');
+    const fromShopifyAdmin = referer.includes('admin.shopify.com') || 
+                              (referer.includes('myshopify.com') && referer.includes('/admin'));
     
-    if (isShopify || hasSession || fromShopify) {
+    // Allow if this is an internal SPA navigation from an already-loaded Shopify session
+    // Check X-Requested-With header (set by fetch/XHR from the React app)
+    const isXHR = req.headers['x-requested-with'] === 'XMLHttpRequest' || 
+                  req.headers.accept?.includes('text/html');
+    
+    if (hasShopifyParams || fromShopifyAdmin) {
       return res.sendFile(path.join(frontendPath, 'index.html'));
     }
     
-    // Not authenticated — redirect to landing page
+    // Not from Shopify — redirect to landing page
     res.redirect('/');
   });
 }

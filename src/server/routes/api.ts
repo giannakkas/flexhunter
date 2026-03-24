@@ -31,11 +31,6 @@ async function getOrCreateShop(req: Request): Promise<string> {
     if (shopId && shopId !== 'dev-shop-id') return shopId;
   }
 
-  // Fallback: try cookie set during OAuth
-  if (!shopDomain || shopDomain === 'unknown') {
-    shopDomain = req.cookies?.shopDomain;
-  }
-
   // If still no domain, find the most recently active shop (standalone/dev mode)
   if (!shopDomain || shopDomain === 'unknown') {
     const shopWithToken = await prisma.shop.findFirst({
