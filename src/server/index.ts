@@ -247,17 +247,19 @@ a{color:#007ACE}p{margin:12px 0}
 if (!config.isDev) {
   const frontendPath = path.join(__dirname, '../../dist/frontend');
   const publicPath = path.join(__dirname, '../../public');
-  app.use(express.static(publicPath));    // Landing page assets
-  app.use(express.static(frontendPath));  // React app assets
   
-  // Landing page for direct visitors (flexhunter.app)
-  // Shopify embedded requests have ?shop= or come through /api/
+  // Landing page for direct visitors FIRST (before static serves index.html)
   app.get('/', (req, res, next) => {
     const isShopify = req.query.shop || req.query.host || req.headers['x-shop-domain'] || req.query.hmac;
     if (isShopify) return next(); // Let React app handle Shopify embedded
     res.sendFile(path.join(publicPath, 'landing.html'));
   });
+
+  // Static assets (JS/CSS/images) — but NOT index.html at root
+  app.use(express.static(publicPath));
+  app.use(express.static(frontendPath, { index: false }));
   
+  // All other routes → React app (SPA catch-all)
   app.get('*', (_req, res) => {
     res.sendFile(path.join(frontendPath, 'index.html'));
   });
