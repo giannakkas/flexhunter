@@ -89,8 +89,8 @@ router.get('/shops', async (_req: Request, res: Response) => {
       include: {
         _count: {
           select: {
-            candidateProducts: true,
-            importedProducts: true,
+            candidates: true,
+            imports: true,
             replacementDecisions: true,
           },
         },
@@ -127,8 +127,8 @@ router.get('/shops/:id', async (req: Request, res: Response) => {
       include: {
         settings: true,
         storeProfile: true,
-        candidateProducts: { take: 10, orderBy: { createdAt: 'desc' }, include: { score: true } },
-        importedProducts: { take: 10, orderBy: { importedAt: 'desc' }, include: { performance: true } },
+        candidates: { take: 10, orderBy: { createdAt: 'desc' }, include: { score: true } },
+        imports: { take: 10, orderBy: { importedAt: 'desc' }, include: { performance: true } },
         jobRuns: { take: 10, orderBy: { createdAt: 'desc' } },
         auditLogs: { take: 20, orderBy: { createdAt: 'desc' } },
       },
@@ -245,9 +245,9 @@ router.get('/export/:type', async (req: Request, res: Response) => {
       csv = 'Title,Price,Status,Orders,Revenue,HealthScore,ImportedAt\n';
       csv += items.map(i => `"${i.importedTitle.replace(/"/g, '""')}",${i.importedPrice},${i.status},${i.performance?.orders || 0},${i.performance?.revenue || 0},${i.performance?.healthScore || 0},${i.importedAt.toISOString()}`).join('\n');
     } else if (type === 'shops') {
-      const items = await prisma.shop.findMany({ include: { _count: { select: { importedProducts: true, candidateProducts: true } } } });
+      const items = await prisma.shop.findMany({ include: { _count: { select: { imports: true, candidates: true } } } });
       csv = 'Domain,Name,Active,Plan,Imports,Candidates,CreatedAt\n';
-      csv += items.map(s => `"${s.shopDomain}","${s.name}",${s.isActive},${s.plan},${s._count.importedProducts},${s._count.candidateProducts},${s.createdAt.toISOString()}`).join('\n');
+      csv += items.map(s => `"${s.shopDomain}","${s.name}",${s.isActive},${s.plan},${s._count.imports},${s._count.candidates},${s.createdAt.toISOString()}`).join('\n');
     } else {
       return res.status(400).json({ error: 'Type must be: candidates, imports, or shops' });
     }
