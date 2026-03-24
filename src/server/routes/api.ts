@@ -556,33 +556,40 @@ router.post('/research/start', researchRateLimit, async (req: Request, res: Resp
     const { checkBillingLimit } = await import('./billing');
     const billingCheck = await checkBillingLimit(shopId, 'research');
     if (!billingCheck.allowed) {
+      console.log(`[Research] ❌ BLOCKED by billing: ${billingCheck.message}`);
       return res.json({ success: false, error: billingCheck.message });
     }
+    console.log(`[Research] ✅ Billing OK`);
 
     // Check if Store DNA is configured
     const settings = await prisma.merchantSettings.findUnique({ where: { shopId } });
     if (!settings?.storeDescription) {
+      console.log(`[Research] ❌ No Store DNA configured for shop ${shopId}`);
       return res.json({
         success: true,
         message: 'Please set up your Store DNA first. Go to Store DNA and describe what your store sells.',
         data: { totalFetched: 0, totalScored: 0, totalSaved: 0, batchId: '', topCandidates: [] },
       });
     }
+    console.log(`[Research] ✅ Store DNA found`);
 
-    // Clean up stuck RUNNING jobs older than 8 minutes
-    const eightMinAgo = new Date(Date.now() - 8 * 60 * 1000);
-    await prisma.jobRun.updateMany({
-      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { lt: eightMinAgo } },
+    // Clean up stuck RUNNING jobs older than 3 minutes
+    const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000);
+    const cleaned = await prisma.jobRun.updateMany({
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { lt: threeMinAgo } },
       data: { status: 'FAILED', error: 'Timed out — auto-cleaned on next research start', completedAt: new Date() },
     });
+    if (cleaned.count > 0) console.log(`[Research] 🧹 Cleaned ${cleaned.count} stuck jobs`);
 
-    // Check if already running (only recent — within last 8 min)
+    // Check if already running (only recent — within last 3 min)
     const running = await prisma.jobRun.findFirst({
-      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { gte: eightMinAgo } },
+      where: { shopId, jobType: 'RESEARCH_PRODUCTS', status: 'RUNNING', createdAt: { gte: threeMinAgo } },
     });
     if (running) {
+      console.log(`[Research] ⏳ Already running — job ${running.id} created at ${running.createdAt}`);
       return res.json({ success: true, message: 'Research already running...', data: { status: 'RUNNING' } });
     }
+    console.log(`[Research] ✅ No running jobs — starting new research`);
 
     // Create job record immediately
     const job = await prisma.jobRun.create({
