@@ -4,7 +4,7 @@
 # Docs: https://shopify.dev/docs/apps/tools/cli/configuration
 
 name = "FlexHunter"
-client_id = "8d6f0fd3bc4c34cfc17a986eb937e3fa"
+client_id = "4fb565e1de535b389ef5bf97fce12be5"
 application_url = "https://flexhunter.app"
 embedded = true
 
