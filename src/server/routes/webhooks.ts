@@ -170,6 +170,32 @@ export default router;
 
 export const gdprRouter = Router();
 
+// HMAC verification for GDPR webhooks
+gdprRouter.use('/webhooks/gdpr', (req: Request, res: Response, next) => {
+  const hmac = req.headers['x-shopify-hmac-sha256'] as string;
+  if (!hmac || !process.env.SHOPIFY_API_SECRET) {
+    if (!process.env.SHOPIFY_API_SECRET) return next(); // Dev mode
+    console.warn(`[GDPR] HMAC missing for ${req.path}`);
+    return res.status(401).send('Unauthorized');
+  }
+  const body = (req as any).rawBody;
+  if (!body) {
+    console.warn(`[GDPR] No rawBody for ${req.path}`);
+    return res.status(401).send('Unauthorized');
+  }
+  try {
+    const hash = crypto
+      .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
+      .update(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
+      .digest('base64');
+    if (crypto.timingSafeEqual(Buffer.from(hmac, 'base64'), Buffer.from(hash, 'base64'))) {
+      return next();
+    }
+  } catch {}
+  console.warn(`[GDPR] HMAC verification FAILED for ${req.path}`);
+  return res.status(401).send('Unauthorized');
+});
+
 // Customer data request — merchant requests data Shopify has on a customer
 gdprRouter.post('/webhooks/gdpr/customers-data-request', async (req: Request, res: Response) => {
   console.log('[GDPR] customers/data_request received');
