@@ -160,124 +160,117 @@ router.post('/webhooks/orders/create', async (req: Request, res: Response) => {
 export default router;
 
 // ==============================================
-// GDPR Mandatory Webhooks (Required for App Store)
+// GDPR Mandatory Compliance Webhooks (Required for App Store)
 // ==============================================
-// These must be registered in shopify.app.toml:
-//   [webhooks.privacy_compliance]
-//     customer_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/customers-redact"
-//     customer_data_request_url = "https://flexhunter.app/api/webhooks/gdpr/customers-data-request"
-//     shop_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/shop-redact"
+// Registered in shopify.app.toml as:
+//   [[webhooks.subscriptions]]
+//     compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+//     uri = "/api/webhooks/compliance"
+// Shopify sends ALL compliance topics to this single endpoint.
+// The topic is in the X-Shopify-Topic header.
 
 export const gdprRouter = Router();
 
-// HMAC verification for GDPR webhooks
-gdprRouter.use('/webhooks/gdpr', (req: Request, res: Response, next) => {
+// Single compliance webhook endpoint with HMAC verification
+gdprRouter.post('/webhooks/compliance', async (req: Request, res: Response) => {
+  // Step 1: Verify HMAC signature
   const hmac = req.headers['x-shopify-hmac-sha256'] as string;
-  if (!hmac || !process.env.SHOPIFY_API_SECRET) {
-    if (!process.env.SHOPIFY_API_SECRET) return next(); // Dev mode
-    console.warn(`[GDPR] HMAC missing for ${req.path}`);
+  const secret = process.env.SHOPIFY_API_SECRET;
+  
+  if (hmac && secret) {
+    const body = (req as any).rawBody;
+    if (!body) {
+      console.warn('[Compliance] No rawBody — rejecting');
+      return res.status(401).send('Unauthorized');
+    }
+    try {
+      const hash = crypto
+        .createHmac('sha256', secret)
+        .update(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
+        .digest('base64');
+      const valid = crypto.timingSafeEqual(
+        Buffer.from(hmac, 'base64'),
+        Buffer.from(hash, 'base64')
+      );
+      if (!valid) {
+        console.warn('[Compliance] HMAC mismatch — rejecting');
+        return res.status(401).send('Unauthorized');
+      }
+    } catch {
+      console.warn('[Compliance] HMAC verification error — rejecting');
+      return res.status(401).send('Unauthorized');
+    }
+  } else if (secret && !hmac) {
+    // Secret is configured but no HMAC header — reject
+    console.warn('[Compliance] No HMAC header — rejecting');
     return res.status(401).send('Unauthorized');
   }
-  const body = (req as any).rawBody;
-  if (!body) {
-    console.warn(`[GDPR] No rawBody for ${req.path}`);
-    return res.status(401).send('Unauthorized');
-  }
-  try {
-    const hash = crypto
-      .createHmac('sha256', process.env.SHOPIFY_API_SECRET)
-      .update(Buffer.isBuffer(body) ? body : Buffer.from(body, 'utf8'))
-      .digest('base64');
-    if (crypto.timingSafeEqual(Buffer.from(hmac, 'base64'), Buffer.from(hash, 'base64'))) {
-      return next();
-    }
-  } catch {}
-  console.warn(`[GDPR] HMAC verification FAILED for ${req.path}`);
-  return res.status(401).send('Unauthorized');
-});
 
-// Customer data request — merchant requests data Shopify has on a customer
-gdprRouter.post('/webhooks/gdpr/customers-data-request', async (req: Request, res: Response) => {
-  console.log('[GDPR] customers/data_request received');
+  // Step 2: Respond immediately with 200
   res.status(200).send('OK');
 
-  try {
-    const { shop_domain, customer } = req.body;
-    console.log(`[GDPR] Data request for customer ${customer?.id} from ${shop_domain}`);
-    // FlexHunter does NOT store customer PII — we only store product data.
-    // No action needed beyond acknowledging the request.
-    await prisma.auditLog.create({
-      data: {
-        shopId: (await prisma.shop.findFirst({ where: { shopDomain: shop_domain } }))?.id || 'unknown',
-        action: 'GDPR_DATA_REQUEST',
-        explanation: `Customer data request for customer ${customer?.id}. No customer PII stored.`,
-      },
-    }).catch(() => {});
-  } catch (err: any) {
-    console.error('[GDPR] customers/data_request error:', err.message);
-  }
-});
-
-// Customer redact — erase customer data
-gdprRouter.post('/webhooks/gdpr/customers-redact', async (req: Request, res: Response) => {
-  console.log('[GDPR] customers/redact received');
-  res.status(200).send('OK');
+  // Step 3: Process based on topic
+  const topic = req.headers['x-shopify-topic'] as string || '';
+  const { shop_domain, customer } = req.body || {};
+  console.log(`[Compliance] Received topic=${topic} shop=${shop_domain}`);
 
   try {
-    const { shop_domain, customer } = req.body;
-    console.log(`[GDPR] Redact customer ${customer?.id} from ${shop_domain}`);
-    // FlexHunter does NOT store customer PII — only product/score data.
-    // No customer data to erase.
-    await prisma.auditLog.create({
-      data: {
-        shopId: (await prisma.shop.findFirst({ where: { shopDomain: shop_domain } }))?.id || 'unknown',
-        action: 'GDPR_CUSTOMER_REDACT',
-        explanation: `Customer ${customer?.id} redacted. No customer PII was stored.`,
-      },
-    }).catch(() => {});
-  } catch (err: any) {
-    console.error('[GDPR] customers/redact error:', err.message);
-  }
-});
+    if (topic === 'customers/data_request') {
+      console.log(`[Compliance] Data request for customer ${customer?.id} from ${shop_domain}`);
+      // FlexHunter does NOT store customer PII — only product data.
+      await prisma.auditLog.create({
+        data: {
+          shopId: (await prisma.shop.findFirst({ where: { shopDomain: shop_domain } }))?.id || 'unknown',
+          action: 'GDPR_DATA_REQUEST',
+          explanation: `Customer data request for customer ${customer?.id}. No customer PII stored.`,
+        },
+      }).catch(() => {});
 
-// Shop redact — 48 hours after app uninstall, erase all shop data
-gdprRouter.post('/webhooks/gdpr/shop-redact', async (req: Request, res: Response) => {
-  console.log('[GDPR] shop/redact received');
-  res.status(200).send('OK');
+    } else if (topic === 'customers/redact') {
+      console.log(`[Compliance] Redact customer ${customer?.id} from ${shop_domain}`);
+      // FlexHunter does NOT store customer PII — nothing to erase.
+      await prisma.auditLog.create({
+        data: {
+          shopId: (await prisma.shop.findFirst({ where: { shopDomain: shop_domain } }))?.id || 'unknown',
+          action: 'GDPR_CUSTOMER_REDACT',
+          explanation: `Customer ${customer?.id} redacted. No customer PII was stored.`,
+        },
+      }).catch(() => {});
 
-  try {
-    const { shop_domain } = req.body;
-    console.log(`[GDPR] Shop redact for ${shop_domain} — deleting all data`);
-    
-    const shop = await prisma.shop.findFirst({ where: { shopDomain: shop_domain } });
-    if (!shop) return;
-    const shopId = shop.id;
+    } else if (topic === 'shop/redact') {
+      console.log(`[Compliance] Shop redact for ${shop_domain} — deleting all data`);
+      const shop = await prisma.shop.findFirst({ where: { shopDomain: shop_domain } });
+      if (!shop) return;
+      const shopId = shop.id;
 
-    // Delete everything for this shop in correct FK order
-    const imports = await prisma.importedProduct.findMany({ where: { shopId }, select: { id: true } });
-    for (const imp of imports) {
-      await prisma.productPerformance.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
-      await prisma.productPin.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
+      // Delete everything for this shop in correct FK order
+      const imports = await prisma.importedProduct.findMany({ where: { shopId }, select: { id: true } });
+      for (const imp of imports) {
+        await prisma.productPerformance.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
+        await prisma.productPin.deleteMany({ where: { importedProductId: imp.id } }).catch(() => {});
+      }
+      await prisma.replacementDecision.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.importedProduct.deleteMany({ where: { shopId } }).catch(() => {});
+      
+      const candidates = await prisma.candidateProduct.findMany({ where: { shopId }, select: { id: true } });
+      for (const c of candidates) {
+        await prisma.candidateScore.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
+        await prisma.productWatchlist.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
+      }
+      await prisma.candidateProduct.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.automationRule.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.auditLog.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.jobRun.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.storeProfile.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.domainAnalysis.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.merchantSettings.deleteMany({ where: { shopId } }).catch(() => {});
+      await prisma.shop.delete({ where: { id: shopId } }).catch(() => {});
+
+      console.log(`[Compliance] All data deleted for ${shop_domain}`);
+    } else {
+      console.warn(`[Compliance] Unknown topic: ${topic}`);
     }
-    await prisma.replacementDecision.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.importedProduct.deleteMany({ where: { shopId } }).catch(() => {});
-    
-    const candidates = await prisma.candidateProduct.findMany({ where: { shopId }, select: { id: true } });
-    for (const c of candidates) {
-      await prisma.candidateScore.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
-      await prisma.productWatchlist.deleteMany({ where: { candidateId: c.id } }).catch(() => {});
-    }
-    await prisma.candidateProduct.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.automationRule.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.auditLog.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.jobRun.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.storeProfile.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.domainAnalysis.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.merchantSettings.deleteMany({ where: { shopId } }).catch(() => {});
-    await prisma.shop.delete({ where: { id: shopId } }).catch(() => {});
-
-    console.log(`[GDPR] All data deleted for ${shop_domain}`);
   } catch (err: any) {
-    console.error('[GDPR] shop/redact error:', err.message);
+    console.error(`[Compliance] Error processing ${topic}: ${err.message}`);
   }
 });

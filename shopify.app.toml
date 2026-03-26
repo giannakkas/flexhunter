@@ -23,11 +23,10 @@ embedded = true
 [webhooks]
   api_version = "2025-01"
 
-  # Mandatory GDPR compliance webhooks
-  [webhooks.privacy_compliance]
-    customer_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/customers-redact"
-    customer_data_request_url = "https://flexhunter.app/api/webhooks/gdpr/customers-data-request"
-    shop_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/shop-redact"
+  # Mandatory GDPR compliance webhooks — single endpoint, topic in header
+  [[webhooks.subscriptions]]
+    compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
+    uri = "/api/webhooks/compliance"
 
 [pos]
   embedded = false
