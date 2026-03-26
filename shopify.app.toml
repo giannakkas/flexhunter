@@ -29,9 +29,6 @@ embedded = true
     customer_data_request_url = "https://flexhunter.app/api/webhooks/gdpr/customers-data-request"
     shop_deletion_url = "https://flexhunter.app/api/webhooks/gdpr/shop-redact"
 
-[app_proxy]
-  # Not needed — FlexHunter is fully embedded
-
 [pos]
   embedded = false
 
